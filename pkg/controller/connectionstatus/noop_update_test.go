@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
-	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	connectionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1beta1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
@@ -41,13 +41,13 @@ func TestReconcileSkipsSecondIdenticalStatusUpdate(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme(t)
 
-	conn := &connectionv1alpha1.Connection{
+	conn := &connectionv1beta1.Connection{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "audit-connection",
 			Namespace: util.GetNamespace(),
 			UID:       k8stypes.UID("connection-uid"),
 		},
-		Spec: connectionv1alpha1.ConnectionSpec{
+		Spec: connectionv1beta1.ConnectionSpec{
 			Driver: disk.Name,
 			Config: &types.Anything{Value: map[string]interface{}{connectionConfigPathKey: "value"}},
 		},
@@ -78,7 +78,7 @@ func TestReconcileSkipsSecondIdenticalStatusUpdate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, statusClient.updateCount, "first reconcile should self-heal missing aggregate status")
 
-	updated := &connectionv1alpha1.Connection{}
+	updated := &connectionv1beta1.Connection{}
 	require.NoError(t, k8sClient.Get(ctx, request.NamespacedName, updated))
 	require.Len(t, updated.Status.ByPod, 1)
 

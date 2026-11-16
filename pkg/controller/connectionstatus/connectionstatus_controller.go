@@ -21,7 +21,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
-	"github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1beta1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -139,19 +139,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	err = c.Watch(
 		source.Kind(
-			mgr.GetCache(), &v1alpha1.Connection{},
-			&handler.TypedEnqueueRequestForObject[*v1alpha1.Connection]{},
-			predicate.TypedFuncs[*v1alpha1.Connection]{
-				CreateFunc: func(e event.TypedCreateEvent[*v1alpha1.Connection]) bool {
+			mgr.GetCache(), &v1beta1.Connection{},
+			&handler.TypedEnqueueRequestForObject[*v1beta1.Connection]{},
+			predicate.TypedFuncs[*v1beta1.Connection]{
+				CreateFunc: func(e event.TypedCreateEvent[*v1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				UpdateFunc: func(e event.TypedUpdateEvent[*v1alpha1.Connection]) bool {
+				UpdateFunc: func(e event.TypedUpdateEvent[*v1beta1.Connection]) bool {
 					return e.ObjectNew.GetNamespace() == util.GetNamespace()
 				},
-				DeleteFunc: func(e event.TypedDeleteEvent[*v1alpha1.Connection]) bool {
+				DeleteFunc: func(e event.TypedDeleteEvent[*v1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				GenericFunc: func(e event.TypedGenericEvent[*v1alpha1.Connection]) bool {
+				GenericFunc: func(e event.TypedGenericEvent[*v1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 			},
@@ -193,7 +193,7 @@ type ReconcileConnectionStatus struct {
 func (r *ReconcileConnectionStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
-	connObj := &v1alpha1.Connection{}
+	connObj := &v1beta1.Connection{}
 	err := r.reader.Get(ctx, request.NamespacedName, connObj)
 	if err != nil {
 		// If the Connection does not exist then we are done

@@ -1,4 +1,4 @@
-apiVersion: connection.gatekeeper.sh/v1alpha1
+apiVersion: connection.gatekeeper.sh/v1beta1
 kind: Connection
 metadata:
   name: audit-connection
