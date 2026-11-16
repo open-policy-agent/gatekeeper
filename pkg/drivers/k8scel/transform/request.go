@@ -22,8 +22,8 @@ func RequestToVersionedAttributes(request *admissionv1.AdmissionRequest) (*admis
 	return &admission.VersionedAttributes{
 		Attributes:         wrapped,
 		VersionedKind:      wrapped.GetKind(),
-		VersionedOldObject: wrapped.GetOldObject(),
-		VersionedObject:    wrapped.GetObject(),
+		VersionedOldObject: admission.NewLazyObject(wrapped.GetOldObject()),
+		VersionedObject:    admission.NewLazyObject(wrapped.GetObject()),
 	}, nil
 }
 
