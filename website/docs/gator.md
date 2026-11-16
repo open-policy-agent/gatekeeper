@@ -593,7 +593,7 @@ Similar to `gator test`, `gator expand` expects a `--filename` or `--image`
 flag. The flags can be used individually, in combination, and/or repeated.
 
 ```shell
-gator expand --filename="manifest.yaml" –filename="expansion-policy/"
+gator expand --filename="manifest.yaml" --filename="expansion-policy/"
 ```
 
 Or, using an OCI Artifact for the expansion configuration:
@@ -602,20 +602,20 @@ Or, using an OCI Artifact for the expansion configuration:
 gator expand --filename="my-deployment.yaml" --plain-http --image=localhost:5000/gator/expansion-policy:v1
 ```
 
-By default, `gator expand` will output to stdout, but a `–outputfile` flag can be
+By default, `gator expand` will output to stdout, but a `--outputfile` flag can be
 specified to write the results to a file.
 
 ```shell
-gator expand --filename="manifest.yaml" –outputfile="results.yaml"
+gator expand --filename="manifest.yaml" --outputfile="results.yaml"
 ```
 
 `gator expand` can output in `yaml` or `json` (default is `yaml`).
 
 ```shell
-gator expand --filename="manifest.yaml" –format="json"
+gator expand --filename="manifest.yaml" --format="json"
 ```
 
-See `gator expand –help` for more details. `gator expand` will exit 1 if there
+See `gator expand --help` for more details. `gator expand` will exit 1 if there
 is a problem parsing the configs or expanding the resources.
 
 #### Non default namespace example
@@ -762,7 +762,7 @@ This template annotation is descriptive, not prescriptive. The prescription of w
 `gator sync test` expects a `--filename` or `--image` flag, or input from stdin. The flags can be used individually, in combination, and/or repeated.
 
 ```
-gator sync test --filename="template.yaml" –-filename="syncsets/" --filename="manifest.yaml"
+gator sync test --filename="template.yaml" --filename="syncsets/" --filename="manifest.yaml"
 ```
 
 Or, using an OCI Artifact containing templates as described previously:
@@ -779,19 +779,14 @@ metadata:
   name: gvkmanifest
 spec:
   groups:
-  - name: "group1"
-    versions:
-    - name: "v1"
-      kinds: ["Kind1", "Kind2"]
-    - name: "v2"
-      kinds: ["Kind1", "Kind3"]
-  - name: "group2"
-    versions:
-      - name: "v1beta1"
-        kinds: ["Kind4", "Kind5"]
+    group1:
+      v1: ["Kind1", "Kind2"]
+      v2: ["Kind1", "Kind3"]
+    group2:
+      v1beta1: ["Kind4", "Kind5"]
 ```
 
-Optionally, the `--omit-gvk-manifest` flag can be used to skip the requirement of providing a manifest of supported GVKs for the cluster. If this is provided, all GVKs will be assumed to be supported by the cluster. If this assumption is not true, then the given config and templates may cause caching errors or incorrect evaluation on the cluster despite passing this command.
+Optionally, the `--force-omit-gvk-manifest` flag can be used to skip the requirement of providing a manifest of supported GVKs for the cluster. If this is provided, all GVKs will be assumed to be supported by the cluster. If this assumption is not true, then the given config and templates may cause caching errors or incorrect evaluation on the cluster despite passing this command.
 
 #### Exit Codes
 
