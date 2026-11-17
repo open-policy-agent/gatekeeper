@@ -154,7 +154,7 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 	run.CompletedAt = &completed
 	run.Phase, run.Reason, run.Message = "Succeeded", "AuditSucceeded", "The audit completed successfully"
 	if auditErr != nil {
-		run.Phase, run.Reason, run.Message = "Failed", "AuditFailed", auditErr.Error()
+		run.Phase, run.Reason, run.Message = "Failed", "AuditFailed", truncateString(auditErr.Error(), msgSize)
 	}
 	if r.pending == nil || r.pending.uid != trigger.UID {
 		r.pending = &auditTriggerCompletion{uid: trigger.UID}
