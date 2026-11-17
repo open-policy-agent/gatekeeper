@@ -105,7 +105,8 @@ spec:
           {{- if not .Values.image.release }}
         image: '{{ .Values.image.crdRepository }}'
           {{- else }}
-        image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
+          {{- /* A digest in image.release belongs to the gatekeeper image, so only its tag is used here. */}}
+        image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release | splitList "@" | first }}'
           {{- end }}
         {{- end }}
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
