@@ -314,16 +314,13 @@ func (am *Manager) audit(ctx context.Context) error {
 	am.client = c
 	// don't audit anything until the constraintTemplate crd is in the cluster
 	if err := am.ensureCRDExists(ctx); err != nil {
-		am.log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
-		return nil
+		return fmt.Errorf("checking ConstraintTemplate CRD: %w", err)
 	}
 
 	// get all constraint kinds
 	constraintsGVKs, err := am.getAllConstraintKinds()
 	if err != nil {
-		// if no constraint is found with the constraint apiversion, then return
-		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
-		return nil
+		return fmt.Errorf("discovering constraint kinds: %w", err)
 	}
 
 	updateLists := make(map[util.KindVersionName]*LimitQueue)
@@ -349,8 +346,10 @@ func (am *Manager) audit(ctx context.Context) error {
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
-
 		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
+		if len(errs) > 0 {
+			return errors.Join(errs...)
+		}
 	} else {
 		am.log.WithValues(logging.Semantic, true).Info("Auditing via discovery client")
 		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
@@ -399,10 +398,12 @@ func (am *Manager) auditResources(
 		return err
 	}
 
+	var errs []error
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
 	if err != nil {
 		if discovery.IsGroupDiscoveryFailedError(err) {
-			am.log.Error(err, "Kubernetes has an orphaned APIService. Delete orphaned APIService using kubectl delete apiservice <name>")
+			am.log.Error(err, "Incomplete resource discovery; continuing audit without publishing constraint statuses")
+			errs = append(errs, fmt.Errorf("discovering audit resources: %w", err))
 		} else {
 			return err
 		}
@@ -413,6 +414,7 @@ func (am *Manager) auditResources(
 		gvParsed, err := schema.ParseGroupVersion(rl.GroupVersion)
 		if err != nil {
 			am.log.Error(err, "Error parsing GroupVersion", "GroupVersion", rl.GroupVersion)
+			errs = append(errs, fmt.Errorf("parsing discovered group version %q: %w", rl.GroupVersion, err))
 			continue
 		}
 
@@ -433,7 +435,6 @@ func (am *Manager) auditResources(
 		}
 	}
 
-	var errs []error
 	namespaceCache := newNSCache()
 
 	matchedKinds := make(map[string]bool)
@@ -444,6 +445,7 @@ func (am *Manager) auditResources(
 			constraintList.SetGroupVersionKind(c)
 			if err = am.client.List(ctx, constraintList); err != nil {
 				am.log.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
+				errs = append(errs, fmt.Errorf("listing constraints for %s: %w", c, err))
 				continue
 			}
 			for _, constraint := range constraintList.Items {
@@ -459,11 +461,13 @@ func (am *Manager) auditResources(
 						kind, ok := k.(map[string]interface{})
 						if !ok {
 							am.log.Error(errors.New("could not cast kind as map[string]"), "kind", k)
+							errs = append(errs, fmt.Errorf("invalid spec.match.kinds entry for %s: %v", c, k))
 							continue
 						}
 						kindsKind, _, err := unstructured.NestedSlice(kind, "kinds")
 						if err != nil {
 							am.log.Error(err, "Unable to return kinds.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+							errs = append(errs, fmt.Errorf("reading spec.match.kinds for %s: %w", c, err))
 							continue
 						}
 						for _, kk := range kindsKind {
@@ -471,6 +475,7 @@ func (am *Manager) auditResources(
 							if !ok {
 								err := fmt.Errorf("invalid kinds.kinds value type %#v, want string", kk)
 								am.log.Error(err, "group", c.Group, "version", c.Version, "kind", c.Kind)
+								errs = append(errs, err)
 								continue constraintsLoop
 							}
 
@@ -527,6 +532,7 @@ func (am *Manager) auditResources(
 				err := am.client.List(ctx, objList, opts)
 				if err != nil {
 					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+					errs = append(errs, fmt.Errorf("listing resources for %s, Kind=%s: %w", gv, kind, err))
 					continue kindsLoop
 				}
 				// for each batch, create a parent folder
@@ -535,6 +541,7 @@ func (am *Manager) auditResources(
 				parentDir := path.Join(*apiCacheDir, subPath)
 				if err := os.Mkdir(parentDir, 0o750); err != nil {
 					am.log.Error(err, "Unable to create parentDir", "parentDir", parentDir)
+					errs = append(errs, fmt.Errorf("creating audit spool directory: %w", err))
 					continue kindsLoop
 				}
 				folderCount++
@@ -543,6 +550,8 @@ func (am *Manager) auditResources(
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
 						log.Error(err, "error while excluding namespaces")
+						errs = append(errs, fmt.Errorf("checking excluded namespace: %w", err))
+						continue
 					}
 
 					if isExcludedNamespace {
@@ -553,11 +562,12 @@ func (am *Manager) auditResources(
 
 				nextResourceVersion := objList.GetResourceVersion()
 				nextContinue := objList.GetContinue()
-				writeErr := am.writeUnstructuredListBestEffort(parentDir, itemsToReview)
+				writeErr := am.writeUnstructuredList(parentDir, itemsToReview)
 				resourceVersion = nextResourceVersion
 				opts.Continue = nextContinue
 				if writeErr != nil {
 					log.Error(writeErr, "error writing data to file")
+					errs = append(errs, fmt.Errorf("writing audit spool: %w", writeErr))
 					if opts.Continue == "" {
 						break
 					}
@@ -582,10 +592,7 @@ func (am *Manager) auditResources(
 		}
 	}
 
-	if len(errs) > 0 {
-		return mergeErrors(errs)
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func shouldAuditKind(matchedKinds map[string]bool, kind string) bool {
@@ -619,6 +626,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		excluded, err := am.skipExcludedNamespace(&obj)
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to exclude object namespace for audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
+			errs = append(errs, fmt.Errorf("checking cached object namespace: %w", err))
 			continue
 		}
 
@@ -641,6 +649,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		resp, err := am.opa.Review(ctx, au, opts...)
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
+			errs = append(errs, fmt.Errorf("reviewing cached object %s %s/%s: %w", obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err))
 			continue
 		}
 
@@ -691,6 +700,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	timestamp string,
 	auditExportPublishingState *auditExportPublishingState,
 ) error {
+	var errs []error
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
 		// apiCacheDir/kind_folderIndex/fileIndex
@@ -700,6 +710,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 		files, err := am.getFilesFromDir(pDir, *auditChunkSize)
 		if err != nil {
 			am.log.Error(err, "Unable to get files from directory")
+			errs = append(errs, fmt.Errorf("reading audit spool directory: %w", err))
 			continue
 		}
 		for _, fileName := range files {
@@ -711,6 +722,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					nsRef, err := nsCache.Get(ctx, am.client, objNs)
 					if err != nil {
 						am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
+						errs = append(errs, fmt.Errorf("reading namespace %q for audit: %w", objNs, err))
 						return
 					}
 					ns = &nsRef
@@ -731,6 +743,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 				if err != nil {
 					am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
+					errs = append(errs, fmt.Errorf("reviewing object %s %s/%s: %w", objFile.GroupVersionKind(), objNs, objFile.GetName(), err))
 					return
 				}
 
@@ -744,6 +757,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				resultants, err := am.expansionSystem.Expand(base)
 				if err != nil {
 					am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
+					errs = append(errs, fmt.Errorf("expanding object %s %s/%s: %w", objFile.GroupVersionKind(), objNs, objFile.GetName(), err))
 					return
 				}
 				for _, resultant := range resultants {
@@ -762,6 +776,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
 					if err != nil {
 						am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
+						errs = append(errs, fmt.Errorf("reviewing expanded object %s: %w", resultant.Obj.GetName(), err))
 						continue
 					}
 					expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
@@ -785,11 +800,12 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			})
 			if err != nil {
 				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
+				errs = append(errs, fmt.Errorf("reading audit spool file %q: %w", filePath, err))
 				continue
 			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []string, err error) {
@@ -801,11 +817,14 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if errors.Is(err, io.EOF) || len(names) == 0 {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return files, err
+		}
+		if len(names) == 0 {
+			break
 		}
 		files = append(files, names...)
 	}
@@ -820,8 +839,11 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if errors.Is(err, io.EOF) || len(names) == 0 {
+		if errors.Is(err, io.EOF) {
 			break
+		}
+		if err != nil {
+			return err
 		}
 		for _, n := range names {
 			err = os.RemoveAll(path.Join(directory, n))
@@ -829,21 +851,14 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 				return err
 			}
 		}
+		if len(names) == 0 {
+			break
+		}
 	}
 	return nil
 }
 
-func (am *Manager) writeUnstructuredList(directory string, objects []unstructured.Unstructured) error {
-	return am.writeUnstructuredListFunc(directory, objects, nil)
-}
-
-func (am *Manager) writeUnstructuredListBestEffort(directory string, objects []unstructured.Unstructured) error {
-	return am.writeUnstructuredListFunc(directory, objects, func(err error) {
-		log.Error(err, "error while marshaling unstructured object to JSON")
-	})
-}
-
-func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstructured.Unstructured, handleMarshalError func(error)) error {
+func (am *Manager) writeUnstructuredList(directory string, objects []unstructured.Unstructured) (err error) {
 	if len(objects) == 0 {
 		return nil
 	}
@@ -852,7 +867,9 @@ func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstruc
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	writer := bufio.NewWriter(file)
 	if _, err := writer.WriteString("["); err != nil {
@@ -862,11 +879,7 @@ func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstruc
 	for index := range objects {
 		jsonBytes, err := objects[index].MarshalJSON()
 		if err != nil {
-			if handleMarshalError == nil {
-				return err
-			}
-			handleMarshalError(err)
-			continue
+			return err
 		}
 		if wroteObject {
 			if _, err := writer.WriteString(","); err != nil {
@@ -1051,6 +1064,9 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	}
 	l, err := discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	resourceGV := strings.Split(constraintsGV, "/")

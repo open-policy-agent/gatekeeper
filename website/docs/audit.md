@@ -38,6 +38,15 @@ clients use the generation watermarks, not this ID, to track requests.
 Success includes completion of constraint-status writes, but does not mean that no violations were
 found or that an external consumer uploaded the results.
 
+Discovery, resource listing, disk spooling, and policy evaluation failures fail the audit.
+An incomplete scan does not publish new constraint statuses or violation totals; the previous
+results are retained. Constraint-status writes are not atomic across constraints: a failure while
+writing a complete scan's results can leave some constraints updated, but does not advance the
+successful generation. A missing required ConstraintTemplate CRD also fails the audit.
+An absent constraint API is treated as an empty audit.
+Timing metrics and audit-finished logs/export messages mark the end of an attempt, including failed
+attempts; use the trigger's generation watermarks to determine success.
+
 Multiple requests observed before an audit starts are coalesced into that audit. A request received
 during an audit requires a subsequent run; it is not silently skipped. A periodic audit can satisfy
 an already-observed request. Following a restart, requests without durable completion are rerun,

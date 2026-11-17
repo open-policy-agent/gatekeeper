@@ -800,6 +800,94 @@ func Test_reviewObjectsBatchedSpoolMatchesPerObjectSpool(t *testing.T) {
 	require.Equal(t, perObject, batched)
 }
 
+func TestReviewObjectsPropagatesFailures(t *testing.T) {
+	for _, failure := range []string{"directory read", "file decode", "namespace lookup", "policy review"} {
+		t.Run(failure, func(t *testing.T) {
+			restore := setAuditGlobalsForReviewTest(t)
+			defer restore()
+			*apiCacheDir = t.TempDir()
+			spoolDir := path.Join(*apiCacheDir, "Pod_0")
+			am := newReviewObjectsTestManager(t, "test-namespace")
+			if failure != "directory read" {
+				require.NoError(t, os.Mkdir(spoolDir, 0o750))
+				require.NoError(t, am.writeUnstructuredList(spoolDir, []unstructured.Unstructured{auditTestPod("pod", "test-namespace")}))
+			}
+			switch failure {
+			case "file decode":
+				require.NoError(t, os.WriteFile(path.Join(spoolDir, auditObjectsFile), []byte("{"), 0o600))
+			case "namespace lookup":
+				am.client = fake.NewClientBuilder().Build()
+			case "policy review":
+				am.opa = auditClientWithoutAuditEnforcementPoint(t)
+			}
+			err := am.reviewObjects(context.Background(), "Pod", 1, newNSCache(),
+				map[util.KindVersionName]*LimitQueue{}, map[util.KindVersionName]int64{},
+				map[util.EnforcementAction]int64{}, "test", &auditExportPublishingState{})
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestAuditFromCachePropagatesFailures(t *testing.T) {
+	pod := fakes.Pod(fakes.WithNamespace("test-namespace"))
+	for _, failure := range []string{"list", "policy review"} {
+		t.Run(failure, func(t *testing.T) {
+			am := newReviewObjectsTestManager(t, "test-namespace")
+			am.processExcluder = process.New()
+			reader := fake.NewClientBuilder().WithObjects(pod).WithInterceptorFuncs(interceptor.Funcs{
+				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					if failure == "list" {
+						return errors.New("cache unavailable")
+					}
+					return c.List(ctx, list, opts...)
+				},
+			}).Build()
+			am.auditCache = NewAuditCacheLister(reader, &fakeWatchIterator{gvksToList: []schema.GroupVersionKind{pod.GroupVersionKind()}})
+			if failure == "policy review" {
+				am.opa = auditClientWithoutAuditEnforcementPoint(t)
+			}
+			_, errs := am.auditFromCache(context.Background())
+			require.NotEmpty(t, errs)
+		})
+	}
+}
+
+func auditClientWithoutAuditEnforcementPoint(t *testing.T) *constraintclient.Client {
+	t.Helper()
+	driver, err := rego.New()
+	require.NoError(t, err)
+	opa, err := constraintclient.NewClient(
+		constraintclient.Targets(&target.K8sValidationTarget{}),
+		constraintclient.Driver(driver),
+		constraintclient.EnforcementPoints(util.WebhookEnforcementPoint),
+	)
+	require.NoError(t, err)
+	return opa
+}
+
+func TestAuditSpoolRejectsIncompleteData(t *testing.T) {
+	am := &Manager{}
+	t.Run("marshal failure", func(t *testing.T) {
+		object := unstructured.Unstructured{Object: map[string]interface{}{"invalid": make(chan struct{})}}
+		require.Error(t, am.writeUnstructuredList(t.TempDir(), []unstructured.Unstructured{object}))
+	})
+	t.Run("directory read failure", func(t *testing.T) {
+		file := path.Join(t.TempDir(), "not-a-directory")
+		require.NoError(t, os.WriteFile(file, nil, 0o600))
+		_, err := am.getFilesFromDir(file, 1)
+		require.Error(t, err)
+		require.Error(t, am.removeAllFromDir(file, 1))
+	})
+	t.Run("unlimited directory batch", func(t *testing.T) {
+		directory := t.TempDir()
+		require.NoError(t, os.WriteFile(path.Join(directory, "object"), nil, 0o600))
+		files, err := am.getFilesFromDir(directory, 0)
+		require.NoError(t, err)
+		require.Equal(t, []string{"object"}, files)
+		require.NoError(t, am.removeAllFromDir(directory, 0))
+	})
+}
+
 type reviewObjectsSummary struct {
 	Violations                          map[util.KindVersionName][]StatusViolation
 	TotalViolationsPerConstraint        map[util.KindVersionName]int64
