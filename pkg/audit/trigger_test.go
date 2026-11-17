@@ -231,6 +231,53 @@ func TestAuditTriggerPeriodicRunWithoutSingleton(t *testing.T) {
 	require.Equal(t, 1, runs)
 }
 
+func TestAuditTriggerCompletionFencedAcrossRunners(t *testing.T) {
+	c := newAuditTriggerClient(t, newAuditTrigger(7))
+	newer := newAuditTriggerRunner(c, func(context.Context) error { return errors.New("newer run failed") })
+	older := newAuditTriggerRunner(c, func(ctx context.Context) error {
+		require.ErrorContains(t, newer.run(ctx, false), "newer run failed")
+		return nil
+	})
+	require.NoError(t, older.run(context.Background(), true))
+	got := getAuditTrigger(t, c).Status
+	require.Equal(t, "Failed", got.LastRun.Phase)
+	require.EqualValues(t, 7, got.SuccessfulGeneration)
+	require.EqualValues(t, 7, got.FailedGeneration)
+}
+
+func TestAuditTriggerStatusFailureDoesNotBlockPeriodicScans(t *testing.T) {
+	c := newAuditTriggerClient(t, newAuditTrigger(7))
+	reject := true
+	wrapped := interceptor.NewClient(c, interceptor.Funcs{
+		SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+			if reject {
+				return apierrors.NewForbidden(schema.GroupResource{Resource: "audittriggers/status"}, obj.GetName(), errors.New("denied"))
+			}
+			return c.SubResource(name).Update(ctx, obj, opts...)
+		},
+	})
+	runs := 0
+	runner := newAuditTriggerRunner(wrapped, func(context.Context) error {
+		runs++
+		if runs == 2 {
+			return errors.New("later failure")
+		}
+		return nil
+	})
+	require.Error(t, runner.run(context.Background(), false))
+	require.Equal(t, 1, runs)
+	advanceAuditTrigger(t, c, 8)
+	require.Error(t, runner.run(context.Background(), false))
+	require.Equal(t, 2, runs)
+	reject = false
+	require.NoError(t, runner.run(context.Background(), true))
+	require.Equal(t, 2, runs)
+	got := getAuditTrigger(t, c).Status
+	require.EqualValues(t, 7, got.SuccessfulGeneration)
+	require.EqualValues(t, 8, got.FailedGeneration)
+	require.Nil(t, runner.pending)
+}
+
 func TestNewAuditTicker(t *testing.T) {
 	ticker, tickerC := newAuditTicker(0)
 	require.Nil(t, ticker)

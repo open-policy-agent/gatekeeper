@@ -2,12 +2,14 @@ package audit
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	auditv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/audit/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -79,6 +81,12 @@ type auditTriggerRunner struct {
 	audit       func(context.Context) error
 	now         func() time.Time
 	resetTicker func()
+	pending     *auditTriggerCompletion
+}
+
+type auditTriggerCompletion struct {
+	uid    types.UID
+	status auditv1alpha1.AuditTriggerStatus
 }
 
 func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
@@ -87,9 +95,18 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 		source = "on-demand"
 	}
 	ctx = logf.IntoContext(ctx, log.WithValues("auditSource", source))
+	if err := r.flushCompletion(ctx); err != nil {
+		if onDemand {
+			return err
+		}
+		logf.FromContext(ctx).Error(err, "persisting previous audit completion; continuing periodic audit")
+	}
 	trigger := &auditv1alpha1.AuditTrigger{}
 	if err := r.reader.Get(ctx, auditTriggerKey, trigger); err != nil {
 		if !apierrors.IsNotFound(err) {
+			if !onDemand {
+				return errors.Join(err, r.audit(ctx))
+			}
 			return err
 		}
 		if onDemand {
@@ -110,6 +127,7 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 	}
 
 	run := auditv1alpha1.AuditRunStatus{
+		ID:                string(uuid.NewUUID()),
 		CoveredGeneration: generation,
 		StartedAt:         metav1.NewTime(r.now()),
 		Phase:             "Running",
@@ -120,7 +138,10 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 		status.AcknowledgedGeneration = max(status.AcknowledgedGeneration, generation)
 		status.LastRun = &run
 	}); err != nil {
-		return err
+		if onDemand {
+			return err
+		}
+		logf.FromContext(ctx).Error(err, "recording audit start; continuing periodic audit")
 	}
 
 	auditErr := r.audit(ctx)
@@ -135,15 +156,17 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 	if auditErr != nil {
 		run.Phase, run.Reason, run.Message = "Failed", "AuditFailed", auditErr.Error()
 	}
-	if err := r.updateStatus(ctx, trigger.UID, func(status *auditv1alpha1.AuditTriggerStatus) {
-		status.LastRun = &run
-		if auditErr == nil {
-			status.SuccessfulGeneration = max(status.SuccessfulGeneration, generation)
-		} else {
-			status.FailedGeneration = max(status.FailedGeneration, generation)
-		}
-	}); err != nil {
-		return err
+	if r.pending == nil || r.pending.uid != trigger.UID {
+		r.pending = &auditTriggerCompletion{uid: trigger.UID}
+	}
+	r.pending.status.LastRun = &run
+	if auditErr == nil {
+		r.pending.status.SuccessfulGeneration = max(r.pending.status.SuccessfulGeneration, generation)
+	} else {
+		r.pending.status.FailedGeneration = max(r.pending.status.FailedGeneration, generation)
+	}
+	if err := r.flushCompletion(ctx); err != nil {
+		return errors.Join(auditErr, err)
 	}
 	if onDemand && auditErr == nil && r.resetTicker != nil {
 		r.resetTicker()
@@ -151,26 +174,52 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 	return auditErr
 }
 
+func (r *auditTriggerRunner) flushCompletion(ctx context.Context) error {
+	if r.pending == nil {
+		return nil
+	}
+	pending := r.pending.status
+	err := r.updateStatus(ctx, r.pending.uid, func(status *auditv1alpha1.AuditTriggerStatus) {
+		status.SuccessfulGeneration = max(status.SuccessfulGeneration, pending.SuccessfulGeneration)
+		status.FailedGeneration = max(status.FailedGeneration, pending.FailedGeneration)
+		if status.LastRun != nil && status.LastRun.ID == pending.LastRun.ID {
+			status.LastRun = pending.LastRun
+		}
+	})
+	if err == nil {
+		r.pending = nil
+	}
+	return err
+}
+
 func (r *auditTriggerRunner) updateStatus(ctx context.Context, uid types.UID, update func(*auditv1alpha1.AuditTriggerStatus)) error {
-	// Persist each result before starting another run. This bounds memory and
-	// prevents a newer failure from erasing an earlier, unpersisted success.
-	return wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
+	// Bound both API calls and retries. Unpersisted completion watermarks are
+	// retained in one accumulator so periodic scans can continue during failures.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (bool, error) {
 		trigger := &auditv1alpha1.AuditTrigger{}
 		if err := r.reader.Get(ctx, auditTriggerKey, trigger); err != nil {
 			if apierrors.IsNotFound(err) {
 				return true, nil
 			}
-			log.Error(err, "reading audit trigger status")
-			return false, nil
+			return false, auditTriggerRetryError(err)
 		}
 		if trigger.UID != uid || !trigger.DeletionTimestamp.IsZero() {
 			return true, nil
 		}
 		update(&trigger.Status)
 		if err := r.client.Status().Update(ctx, trigger); err != nil {
-			log.Error(err, "updating audit trigger status")
-			return false, nil
+			return false, auditTriggerRetryError(err)
 		}
 		return true, nil
 	})
+}
+
+func auditTriggerRetryError(err error) error {
+	if apierrors.IsConflict(err) || apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
+		apierrors.IsTooManyRequests(err) || apierrors.IsServiceUnavailable(err) {
+		return nil
+	}
+	return err
 }

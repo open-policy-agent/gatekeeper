@@ -266,7 +266,7 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 // audit performs an audit then updates the status of all constraint resources with the results.
 func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
-	timestamp := startTime.UTC().Format(time.RFC3339)
+	timestamp := startTime.UTC().Format(time.RFC3339Nano)
 	am.log = logf.FromContext(ctx).WithValues(logging.AuditID, timestamp)
 	logStart(am.log)
 	auditExportPublishingState := auditExportPublishingState{
@@ -374,9 +374,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// update constraints for each kind
-	am.writeAuditResults(ctx, constraintsGVKs, updateLists, timestamp, totalViolationsPerConstraint)
-
-	return nil
+	return am.writeAuditResults(ctx, constraintsGVKs, updateLists, timestamp, totalViolationsPerConstraint)
 }
 
 // Audits server resources via the discovery client.
@@ -981,6 +979,21 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 	} else {
 		log.Info("periodic auditing is disabled; audits can still be triggered with AuditTrigger")
 	}
+	var retryTimer *time.Timer
+	var retryC <-chan time.Time
+	defer func() {
+		if retryTimer != nil {
+			retryTimer.Stop()
+		}
+	}()
+	scheduleRetry := func() {
+		if retryTimer == nil {
+			retryTimer = time.NewTimer(time.Second)
+		} else {
+			retryTimer.Reset(time.Second)
+		}
+		retryC = retryTimer.C
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -991,19 +1004,19 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 			err := runner.run(ctx, false)
 			if err != nil {
 				log.Error(err, "audit manager audit() failed")
+				scheduleRetry()
+			}
+		case <-retryC:
+			retryC = nil
+			select {
+			case am.auditTriggerWake <- struct{}{}:
+			default:
 			}
 		case <-am.auditTriggerWake:
 			err := runner.run(ctx, true)
 			if err != nil {
 				log.Error(err, "on-demand audit failed")
-				select {
-				case <-ctx.Done():
-				case <-time.After(time.Second):
-					select {
-					case am.auditTriggerWake <- struct{}{}:
-					default:
-					}
-				}
+				scheduleRetry()
 			}
 		}
 	}
@@ -1151,20 +1164,19 @@ func (am *Manager) stopAuditResultsUpdateLoop() {
 	}
 	// this is closing the previous audit reporting thread
 	am.log.Info("closing the previous audit reporting thread")
-	close(am.ucloop.stop)
-	select {
-	case <-am.ucloop.stopped:
-	case <-time.After(time.Duration(*auditInterval) * time.Second):
-		// avoid deadlocking in cases where ucloop never stops
-		// this creates potential leak of threads but avoids potential of deadlocking
-		am.log.Info("timeout waiting for previous audit reporting thread to finish")
+	if am.ucloop.cancel != nil {
+		am.ucloop.cancel()
 	}
+	close(am.ucloop.stop)
+	<-am.ucloop.stopped
 	am.ucloop = nil
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) error {
 	am.stopAuditResultsUpdateLoop()
 
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
 	am.ucloop = &updateConstraintLoop{
 		client:  am.client,
 		stop:    make(chan struct{}),
@@ -1173,9 +1185,12 @@ func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []sche
 		ts:      timestamp,
 		tv:      totalViolations,
 		log:     am.log,
+		cancel:  cancel,
 	}
 
 	go am.ucloop.update(ctx, constraintsGVKs)
+	<-am.ucloop.stopped
+	return am.ucloop.err
 }
 
 func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
@@ -1188,9 +1203,24 @@ func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, 
 }
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults *LimitQueue, timestamp string, totalViolations int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	previous, _, err := unstructured.NestedString(instance.Object, "status", "auditTimestamp")
+	if err != nil {
+		return err
+	}
+	previousTime, previousErr := time.Parse(time.RFC3339Nano, previous)
+	runTime, runErr := time.Parse(time.RFC3339Nano, timestamp)
+	if previousErr == nil && runErr == nil && previousTime.After(runTime) {
+		return nil
+	}
 	constraintName := instance.GetName()
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
 
+	results := *auditResults
+	results.svq = append(SVQueue(nil), auditResults.svq...)
+	auditResults = &results
 	var statusViolations []interface{}
 	for auditResults.Len() > 0 {
 		if len(statusViolations) < *constraintViolationsLimit {
@@ -1266,6 +1296,8 @@ type updateConstraintLoop struct {
 	ts      string
 	tv      map[util.KindVersionName]int64
 	log     logr.Logger
+	cancel  context.CancelFunc
+	err     error
 }
 
 func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs []schema.GroupVersionKind) {
@@ -1287,7 +1319,8 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		err := ucloop.client.List(ctx, instanceList)
 		if err != nil {
 			ucloop.log.Error(err, "error while listing constraints", "kind", constraintGvk.Kind)
-			continue
+			ucloop.err = err
+			return
 		}
 		ucloop.log.Info("constraint", "count of constraints", len(instanceList.Items))
 
@@ -1323,6 +1356,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					if apierrors.IsNotFound(err) {
 						ucloop.log.Info("could not find constraint", "name", key.Name, "namespace", key.Namespace)
 						delete(ucloop.uc, key)
+						continue
 					} else {
 						ucloop.log.Error(err, "could not get latest constraint during update", "name", key.Name, "namespace", key.Namespace)
 						continue
@@ -1352,12 +1386,13 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		return false, nil
 	}
 
-	if err := wait.ExponentialBackoff(wait.Backoff{
+	if err := wait.ExponentialBackoffWithContext(ctx, wait.Backoff{
 		Duration: 1 * time.Second,
 		Factor:   2,
 		Jitter:   1,
 		Steps:    5,
-	}, updateLoop); err != nil {
+	}, func(context.Context) (bool, error) { return updateLoop() }); err != nil {
+		ucloop.err = err
 		ucloop.log.Error(err, "could not update constraint reached max retries", "remaining update constraints", fmt.Sprintf("%v", ucloop.uc))
 	}
 }

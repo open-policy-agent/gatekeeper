@@ -2638,6 +2638,11 @@ spec:
                       Later requests need another run.
                     format: int64
                     type: integer
+                  id:
+                    description: |-
+                      ID identifies this execution for fencing status writes across audit pods.
+                      Clients track requests using generation watermarks, not this ID.
+                    type: string
                   message:
                     type: string
                   phase:

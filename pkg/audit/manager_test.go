@@ -44,6 +44,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	controllerruntimemanager "sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -1156,20 +1157,114 @@ func BenchmarkHasConstraintInstancesNoConstraints(b *testing.B) {
 func Test_stopAuditResultsUpdateLoop(t *testing.T) {
 	stop := make(chan struct{})
 	stopped := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	am := &Manager{
 		log: logr.Discard(),
 		ucloop: &updateConstraintLoop{
 			stop:    stop,
 			stopped: stopped,
+			cancel:  cancel,
 		},
 	}
 	go func() {
+		<-ctx.Done()
 		<-stop
 		close(stopped)
 	}()
 
 	am.stopAuditResultsUpdateLoop()
 	require.Nil(t, am.ucloop)
+}
+
+func TestAuditResultsWaitForStatusWrites(t *testing.T) {
+	constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+		"kind":       "TestConstraint",
+		"metadata":   map[string]interface{}{"name": "example"},
+	}}
+	base := fake.NewClientBuilder().WithObjects(constraint).WithStatusSubresource(constraint).Build()
+	for _, cancelWrite := range []bool{false, true} {
+		t.Run(strconv.FormatBool(cancelWrite), func(t *testing.T) {
+			entered := make(chan struct{})
+			release := make(chan struct{})
+			wrapped := interceptor.NewClient(base, interceptor.Funcs{
+				SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+					close(entered)
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-release:
+						return c.SubResource(name).Update(ctx, obj, opts...)
+					}
+				},
+			})
+			am := &Manager{client: wrapped, log: logr.Discard()}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				done <- am.writeAuditResults(ctx, []schema.GroupVersionKind{constraint.GroupVersionKind()},
+					nil, time.Now().UTC().Format(time.RFC3339Nano), nil)
+			}()
+			select {
+			case <-entered:
+			case err := <-done:
+				t.Fatalf("reporting returned before a status write: %v", err)
+			case <-time.After(5 * time.Second):
+				t.Fatal("status write did not start")
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("reporting returned before its status write completed: %v", err)
+			default:
+			}
+			if cancelWrite {
+				cancel()
+				require.ErrorIs(t, <-done, context.Canceled)
+			} else {
+				close(release)
+				require.NoError(t, <-done)
+			}
+		})
+	}
+}
+
+func TestAuditStatusWritesPreserveResultsAndRejectOlderRuns(t *testing.T) {
+	constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+		"kind":       "TestConstraint",
+		"metadata":   map[string]interface{}{"name": "example"},
+		"status":     map[string]interface{}{"auditTimestamp": "2026-11-04T00:00:00.002Z"},
+	}}
+	base := fake.NewClientBuilder().WithObjects(constraint).WithStatusSubresource(constraint).Build()
+	fail := true
+	writes := 0
+	wrapped := interceptor.NewClient(base, interceptor.Funcs{
+		SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+			writes++
+			if fail {
+				fail = false
+				return errors.New("status update failed")
+			}
+			return c.SubResource(name).Update(ctx, obj, opts...)
+		},
+	})
+	loop := &updateConstraintLoop{client: wrapped, log: logr.Discard()}
+	results := newLimitQueue(1)
+	results.Push(&StatusViolation{Name: "noncompliant"})
+	require.NoError(t, loop.updateConstraintStatus(context.Background(), constraint, results, "2026-11-04T00:00:00.001Z", 1))
+	require.Zero(t, writes)
+	require.Error(t, loop.updateConstraintStatus(context.Background(), constraint, results, "2026-11-04T00:00:00.003Z", 1))
+	require.NoError(t, loop.updateConstraintStatus(context.Background(), constraint, results, "2026-11-04T00:00:00.003Z", 1))
+	require.Equal(t, 1, results.Len())
+	got := constraint.DeepCopy()
+	require.NoError(t, base.Get(context.Background(), client.ObjectKeyFromObject(constraint), got))
+	violations, _, err := unstructured.NestedSlice(got.Object, "status", "violations")
+	require.NoError(t, err)
+	require.Len(t, violations, 1)
+	violation, ok := violations[0].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, "noncompliant", violation["name"])
 }
 
 func TestAuditExportPublishingStateBoundsErrors(t *testing.T) {

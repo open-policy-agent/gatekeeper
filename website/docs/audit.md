@@ -33,9 +33,10 @@ For the generation `G` returned by your write, evaluate status in this order:
 
 Missing generation watermarks mean zero. Watermarks never decrease within the same object's lifetime.
 A later failure does not invalidate an earlier success. `status.lastRun` describes the latest started
-execution, regardless of what triggered it; use the watermarks rather than `lastRun` to track requests.
-Success means the existing audit operation returned successfully, not that no violations were found
-or that an external consumer uploaded the results.
+execution, regardless of what triggered it. Its server-generated `id` fences overlapping executions;
+clients use the generation watermarks, not this ID, to track requests.
+Success includes completion of constraint-status writes, but does not mean that no violations were
+found or that an external consumer uploaded the results.
 
 Multiple requests observed before an audit starts are coalesced into that audit. A request received
 during an audit requires a subsequent run; it is not silently skipped. A periodic audit can satisfy
@@ -43,10 +44,13 @@ an already-observed request. Following a restart, requests without durable compl
 so execution is at-least-once, not exactly-once. Starting an audit does not itself guarantee that
 all policy and resource caches have caught up.
 
-An on-demand
-audit also resets the periodic audit schedule, so another audit will still start within the configured
+An on-demand audit resets the periodic audit schedule only after successful completion, so another audit will still start within the configured
 `--audit-interval`. Setting `--audit-interval=0` disables periodic audits, but audits can still be
 requested with an `AuditTrigger`.
+
+Trigger-status writes use bounded retries. If a completion cannot be persisted, Gatekeeper retains
+the highest successful and failed generations in memory and retries without blocking periodic scans.
+A restart before persistence may rerun the request.
 
 ## Reading Audit Results
 
