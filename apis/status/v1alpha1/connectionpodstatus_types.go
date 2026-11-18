@@ -16,6 +16,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"crypto/sha256"
+	"fmt"
+
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -23,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -31,15 +35,22 @@ import (
 
 // ConnectionPodStatusStatus defines the observed state of ConnectionPodStatus.
 type ConnectionPodStatusStatus struct {
-	// ID is the unique identifier for the pod that wrote the status
-	ID                 string    `json:"id,omitempty"`
-	ConnectionUID      types.UID `json:"connectionUID,omitempty"`
-	Operations         []string  `json:"operations,omitempty"`
-	ObservedGeneration int64     `json:"observedGeneration,omitempty"`
-	// ConnectionErrors contains errors from creating or updating the Connection.
+	// id is the unique identifier for the pod that wrote the status
+	ID string `json:"id,omitempty"`
+	// connectionUID is the UID of the Connection this status reports on. It is
+	// used to ignore statuses that belong to a previous Connection with the same
+	// name, for example after the Connection was deleted and recreated.
+	ConnectionUID types.UID `json:"connectionUID,omitempty"`
+	// operations lists the Gatekeeper operations assigned to the pod that generated
+	// this status.
+	Operations []string `json:"operations,omitempty"`
+	// observedGeneration is the generation of the Connection that was last processed
+	// by this pod.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// connectionErrors contains errors from creating or updating the Connection.
 	// +kubebuilder:validation:MaxItems=500
 	ConnectionErrors []*ConnectionError `json:"connectionErrors,omitempty"`
-	// PublishStatuses reports publishing health independently for each source.
+	// publishStatuses reports publishing health independently for each source.
 	// +kubebuilder:validation:MaxItems=2
 	// +listType=map
 	// +listMapKey=source
@@ -48,16 +59,16 @@ type ConnectionPodStatusStatus struct {
 
 // ConnectionPublishStatus reports publishing health for one producer.
 type ConnectionPublishStatus struct {
-	// Source identifies the producer that owns this status.
+	// source identifies the producer that owns this status.
 	Source ConnectionPublishSource `json:"source"`
-	// Active indicates that the source completed at least one publish in its
+	// active indicates that the source completed at least one publish in its
 	// latest reporting window.
 	Active bool `json:"active,omitempty"`
-	// LastAttemptTime is the most recent publish attempt represented by this status.
+	// lastAttemptTime is the most recent publish attempt represented by this status.
 	LastAttemptTime *metav1.Time `json:"lastAttemptTime,omitempty"`
-	// LastSuccessTime is the most recent successful publish by this source.
+	// lastSuccessTime is the most recent successful publish by this source.
 	LastSuccessTime *metav1.Time `json:"lastSuccessTime,omitempty"`
-	// Errors contains publish failures reported by this source.
+	// errors contains publish failures reported by this source.
 	// +kubebuilder:validation:MaxItems=500
 	Errors []*ConnectionError `json:"errors,omitempty"`
 }
@@ -74,8 +85,11 @@ const (
 )
 
 type ConnectionError struct {
-	Type    connectionErrorType `json:"type"`
-	Message string              `json:"message"`
+	// type indicates a specific class of error for use by controller code. If not
+	// present, the error should be treated as not matching any known type.
+	Type connectionErrorType `json:"type"`
+	// message is a human-readable description of the error.
+	Message string `json:"message"`
 }
 
 type connectionErrorType string
@@ -88,9 +102,12 @@ const (
 // +kubebuilder:object:root=true
 // ConnectionPodStatus is the Schema for the connectionpodstatuses API.
 type ConnectionPodStatus struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// No spec field is defined here, as this is a status-only resource.
+
+	// status is the observed state of the Connection for this pod.
 	Status ConnectionPodStatusStatus `json:"status,omitempty"`
 }
 
@@ -129,5 +146,15 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 
 // KeyForConnection returns a unique status object name given the Pod ID and a connection object.
 func KeyForConnection(id string, connectionNamespace string, connectionName string) (string, error) {
-	return v1beta1.DashPacker(id, connectionNamespace, connectionName)
+	key, err := v1beta1.DashPacker(id, connectionNamespace, connectionName)
+	if err != nil {
+		return "", err
+	}
+	if len(key) <= validation.DNS1123SubdomainMaxLength {
+		return key, nil
+	}
+	// Preserve every valid legacy key. Hash the unambiguous packed tuple only
+	// when dash escaping exceeds the API name limit. The single separator
+	// keeps this format disjoint from legacy keys, which have at least two.
+	return fmt.Sprintf("connection-%x", sha256.Sum256([]byte(key))), nil
 }

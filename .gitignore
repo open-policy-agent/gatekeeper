@@ -357,6 +357,3 @@ tilt-settings.json
 
 # dummy provider's certificate directory
 test/externaldata/dummy-provider/certs/
-
-# annotations for dapr
-annotations.yaml

@@ -2,11 +2,14 @@ package export
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
+	"sync/atomic"
 
-	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	"github.com/go-logr/logr"
+	connectionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1beta1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/connectionstatus"
@@ -15,12 +18,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"go.opentelemetry.io/otel"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,6 +40,9 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "export_controller")
 
+// ErrConnectionNotFound identifies a missing Connection during a publish-status update.
+var ErrConnectionNotFound = errors.New("connection not found")
+
 type Adder struct {
 	ExportSystem export.Exporter
 	// GetPod returns an instance of the currently running Gatekeeper pod
@@ -42,15 +50,18 @@ type Adder struct {
 }
 
 func (a *Adder) Add(mgr manager.Manager) error {
-	if !*exportutil.ExportEnabled && !*exportutil.AdmissionExportEnabled {
-		log.Info("Export functionality is disabled, skipping export connection controller setup")
+	if !exportutil.ExportConnectionControllerEnabled() {
+		log.V(logging.DebugLevel).Info("export connection controller not required for this process")
 		return nil
 	}
 	if isNilExporter(a.ExportSystem) {
 		return fmt.Errorf("export connection controller requires an export system")
 	}
 	r := newReconciler(mgr, a.ExportSystem, *exportutil.AuditConnection, a.GetPod)
-	return add(mgr, r)
+	if err := registerConnectionStateMetric(otel.GetMeterProvider().Meter("gatekeeper"), &r.state); err != nil {
+		return err
+	}
+	return add(mgr, r, r.auditConnectionName)
 }
 
 // isNilExporter reports whether system is nil, including the case where it is
@@ -88,16 +99,12 @@ type Reconciler struct {
 	// TODO: Refactor this once multiple connections are supported, for now this helps with injecting dependency for tests
 	auditConnectionName string
 	getPod              func(context.Context) (*corev1.Pod, error)
+	// state holds the connectionState of auditConnectionName.
+	state atomic.Int32
+	log   logr.Logger
 }
 
 func newReconciler(mgr manager.Manager, system export.Exporter, auditConnectionName string, getPod func(context.Context) (*corev1.Pod, error)) *Reconciler {
-	if !*exportutil.ExportEnabled && !*exportutil.AdmissionExportEnabled {
-		log.Info("Export is disabled via flag")
-		return nil
-	}
-
-	log.Info("Warning: Alpha violation export is enabled. This feature may change in the future.")
-
 	return &Reconciler{
 		reader:              mgr.GetCache(),
 		writer:              mgr.GetClient(),
@@ -105,29 +112,33 @@ func newReconciler(mgr manager.Manager, system export.Exporter, auditConnectionN
 		system:              system,
 		auditConnectionName: auditConnectionName,
 		getPod:              getPod,
+		log:                 log,
 	}
 }
 
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r reconcile.Reconciler, connectionName string) error {
 	c, err := controller.New("export-connection-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
+	if err := c.Watch(seedConnectionSource(connectionName)); err != nil {
+		return err
+	}
 	err = c.Watch(
 		source.Kind(
-			mgr.GetCache(), &connectionv1alpha1.Connection{},
-			&handler.TypedEnqueueRequestForObject[*connectionv1alpha1.Connection]{},
-			predicate.TypedFuncs[*connectionv1alpha1.Connection]{
-				CreateFunc: func(e event.TypedCreateEvent[*connectionv1alpha1.Connection]) bool {
+			mgr.GetCache(), &connectionv1beta1.Connection{},
+			&handler.TypedEnqueueRequestForObject[*connectionv1beta1.Connection]{},
+			predicate.TypedFuncs[*connectionv1beta1.Connection]{
+				CreateFunc: func(e event.TypedCreateEvent[*connectionv1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				UpdateFunc: func(e event.TypedUpdateEvent[*connectionv1alpha1.Connection]) bool {
-					return e.ObjectNew.GetNamespace() == util.GetNamespace()
+				UpdateFunc: func(e event.TypedUpdateEvent[*connectionv1beta1.Connection]) bool {
+					return e.ObjectNew.GetNamespace() == util.GetNamespace() && connectionUpdateRequiresReconcile(e.ObjectOld, e.ObjectNew)
 				},
-				DeleteFunc: func(e event.TypedDeleteEvent[*connectionv1alpha1.Connection]) bool {
+				DeleteFunc: func(e event.TypedDeleteEvent[*connectionv1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				GenericFunc: func(e event.TypedGenericEvent[*connectionv1alpha1.Connection]) bool {
+				GenericFunc: func(e event.TypedGenericEvent[*connectionv1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 			},
@@ -164,6 +175,24 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
+// seedConnectionSource queues one request for the configured connection at
+// startup, so a pod without a Connection object reports not_configured.
+func seedConnectionSource(connectionName string) source.Source {
+	return source.Func(func(_ context.Context, q workqueue.TypedRateLimitingInterface[reconcile.Request]) error {
+		q.Add(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: util.GetNamespace(), Name: connectionName}})
+		return nil
+	})
+}
+
+// connectionUpdateRequiresReconcile reconciles only on spec changes (generation)
+// or a recreate (UID), skipping the status update that follows every publish.
+func connectionUpdateRequiresReconcile(oldConn, newConn *connectionv1beta1.Connection) bool {
+	if oldConn == nil || newConn == nil {
+		return true
+	}
+	return oldConn.GetGeneration() != newConn.GetGeneration() || oldConn.GetUID() != newConn.GetUID()
+}
+
 // connectionPodStatusUpdateRequiresReconcile filters publisher-owned health
 // updates. They must still reach the status aggregator, but cannot change the
 // configured export driver and should not cause an UpsertConnection feedback loop.
@@ -181,10 +210,10 @@ func connectionPodStatusUpdateRequiresReconcile(oldStatus, newStatus *statusv1al
 // +kubebuilder:rbac:groups=connection.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=status.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
+	r.log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
-	connObj := &connectionv1alpha1.Connection{}
+	connObj := &connectionv1beta1.Connection{}
 	err := r.reader.Get(ctx, request.NamespacedName, connObj)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -195,26 +224,40 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if deleted {
 		err := r.system.CloseConnection(request.Name)
+		wasConfigured := false
+		if request.Name == r.auditConnectionName {
+			previous := connectionState(r.state.Swap(int32(stateNotConfigured)))
+			wasConfigured = previous == stateReady || previous == stateError
+		}
 		if err != nil {
-			log.Error(err, "failed to close connection", "name", request.Name)
+			r.log.Error(err, "failed to close connection", "name", request.Name)
 			return reconcile.Result{Requeue: true}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
 		}
-		log.Info("removed connection", "name", request.Name)
+		if wasConfigured {
+			r.log.Info("removed connection", "name", request.Name)
+		}
 		return reconcile.Result{}, deleteStatus(ctx, r.writer, request.Namespace, request.Name, r.getPod)
 	}
 	if request.Name != r.auditConnectionName {
 		err := fmt.Errorf("error unsupported connection name %s. Connection name should align with flag --audit-connection set or defaulted to '%s'", request.Name, r.auditConnectionName)
-		log.Error(err, "unsupported connection", "namespace", request.Namespace)
+		r.log.Error(err, "unsupported connection", "namespace", request.Namespace)
 		connectionErrors := []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}
 		return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, connectionErrors, nil, r.getPod)
 	}
-	err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
+	// spec is optional in the CRD, so config can be nil.
+	if connObj.Spec.Config == nil || connObj.Spec.Config.Value == nil {
+		err = errors.New("spec.config is required")
+	} else {
+		err = r.system.UpsertConnection(ctx, connObj.Spec.Config.Value, request.Name, connObj.Spec.Driver)
+	}
 	if err != nil {
-		log.Error(err, "failed to upsert connection", "name", request.Name)
+		r.state.Store(int32(stateError))
+		r.log.Error(err, "failed to upsert connection", "name", request.Name)
 		return reconcile.Result{Requeue: true}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, []*statusv1alpha1.ConnectionError{{Type: statusv1alpha1.UpsertConnectionError, Message: err.Error()}}, nil, r.getPod)
 	}
 
-	log.Info("Connection upsert successful", "name", request.Name, "driver", connObj.Spec.Driver)
+	r.state.Store(int32(stateReady))
+	r.log.Info("Connection upsert successful", "name", request.Name, "driver", connObj.Spec.Driver)
 	return reconcile.Result{}, updateOrCreateConnectionPodStatus(ctx, r.reader, r.writer, r.scheme, connObj, nil, nil, r.getPod)
 }
 
@@ -233,7 +276,7 @@ func UpdateOrCreateConnectionPodStatus(
 		Namespace: util.GetNamespace(),
 		Name:      connObjName,
 	}
-	connObj := &connectionv1alpha1.Connection{}
+	connObj := &connectionv1beta1.Connection{}
 	err := reader.Get(ctx, request, connObj)
 	if err != nil {
 		return err
@@ -265,8 +308,11 @@ func UpdateConnectionPodPublishStatus(
 	return retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)
 	}, func() error {
-		connObj := &connectionv1alpha1.Connection{}
+		connObj := &connectionv1beta1.Connection{}
 		if err := reader.Get(ctx, request, connObj); err != nil {
+			if apierrors.IsNotFound(err) {
+				return fmt.Errorf("%w: %w", ErrConnectionNotFound, err)
+			}
 			return err
 		}
 		return updateOrCreateConnectionPodStatus(ctx, reader, writer, scheme, connObj, nil, &publishStatus, getPod)
@@ -277,7 +323,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	reader client.Reader,
 	writer client.Writer,
 	scheme *runtime.Scheme,
-	connObj *connectionv1alpha1.Connection,
+	connObj *connectionv1beta1.Connection,
 	connectionErrors []*statusv1alpha1.ConnectionError,
 	publishStatus *statusv1alpha1.ConnectionPublishStatus,
 	getPod func(context.Context) (*corev1.Pod, error),
@@ -316,8 +362,10 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 		}
 	}
 
-	generationChanged := connPodStatusObj.Status.ObservedGeneration != connObj.GetGeneration()
-	if generationChanged {
+	// A recreated Connection restarts at generation 1, so also check the UID.
+	connectionChanged := connPodStatusObj.Status.ObservedGeneration != connObj.GetGeneration() ||
+		connPodStatusObj.Status.ConnectionUID != connObj.GetUID()
+	if connectionChanged {
 		connPodStatusObj.Status.PublishStatuses = nil
 		connPodStatusObj.Status.ConnectionErrors = nil
 	}
@@ -330,6 +378,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 
 	// ObservedGeneration is used to track the generation of the Connection object
 	connPodStatusObj.Status.ObservedGeneration = connObj.GetGeneration()
+	connPodStatusObj.Status.ConnectionUID = connObj.GetUID()
 
 	if shouldCreate {
 		log.Info("Creating new ConnectionPodStatus object", "name", connPodStatusObj.GetName())
@@ -342,7 +391,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	return writer.Update(ctx, connPodStatusObj)
 }
 
-func repairConnectionPodStatusMetadata(scheme *runtime.Scheme, status *statusv1alpha1.ConnectionPodStatus, pod *corev1.Pod, connObj *connectionv1alpha1.Connection) error {
+func repairConnectionPodStatusMetadata(scheme *runtime.Scheme, status *statusv1alpha1.ConnectionPodStatus, pod *corev1.Pod, connObj *connectionv1beta1.Connection) error {
 	mergeLabels(status, map[string]string{
 		statusv1beta1.ConnectionNameLabel: connObj.GetName(),
 		statusv1beta1.PodLabel:            pod.Name,
@@ -423,7 +472,7 @@ func deleteStatus(ctx context.Context,
 
 func newConnectionPodStatus(scheme *runtime.Scheme,
 	pod *corev1.Pod,
-	connObj *connectionv1alpha1.Connection,
+	connObj *connectionv1beta1.Connection,
 ) (*statusv1alpha1.ConnectionPodStatus, error) {
 	connPodStatusObj, err := statusv1alpha1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), scheme)
 	if err != nil {

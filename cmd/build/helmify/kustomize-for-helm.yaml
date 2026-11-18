@@ -102,7 +102,7 @@ spec:
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - --max-serving-threads={{ .Values.maxServingThreads }}
             - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook }}{{ .Values.validatingWebhookName }}{{ end }}
             - HELMSUBST_ADDITIONAL_VALIDATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - HELMSUBST_ADDITIONAL_MUTATING_WEBHOOK_CONFIGS_TO_ROTATE_CERTS
@@ -121,6 +121,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
+            - HELMSUBST_DEPLOYMENT_VAP_GENERATION_MODE
             - HELMSUBST_DEPLOYMENT_DEFAULT_WAIT_VAPB_GENERATION
             - HELMSUBST_READINESS_RETRIES
             - HELMSUBST_ENABLE_PPROF
@@ -201,7 +202,7 @@ spec:
             - --audit-interval={{ .Values.auditInterval }}
             - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook }}{{ .Values.validatingWebhookName }}{{ end }}
             - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE
@@ -229,6 +230,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAP_FOR_TEMPLATES
             - HELMSUBST_DEPLOYMENT_DEFAULT_CREATE_VAPB_FOR_CONSTRAINTS
+            - HELMSUBST_DEPLOYMENT_VAP_GENERATION_MODE
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES

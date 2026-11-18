@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
+	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -35,6 +36,8 @@ import (
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
+	// These tests register controllers without an export system.
+	*exportutil.ExportEnabled = false
 	var err error
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{

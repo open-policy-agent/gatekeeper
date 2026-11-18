@@ -87,10 +87,32 @@ func initializeVAPTestInstruments(t *testing.T) (rdr *sdkmetric.PeriodicReader, 
 	assert.NoError(t, err)
 	meter := mp.Meter("test")
 
+	_, err = meter.Int64ObservableGauge(vapMetricName, metric.WithInt64Callback(r.observeVAP))
+	assert.NoError(t, err)
 	_, err = meter.Int64ObservableGauge(vapbMetricName, metric.WithInt64Callback(r.observeVAPB))
 	assert.NoError(t, err)
 
 	return rdr, r
+}
+
+func TestVAPMetrics(t *testing.T) {
+	_, r := initializeVAPTestInstruments(t)
+	vapName := types.NamespacedName{Name: "constraint-vap"}
+
+	r.ReportVAPStatus(vapName, metrics.VAPStatusError)
+	totals := r.vapRegistry.ComputeTotals()
+	assert.Equal(t, int64(1), totals[metrics.VAPStatusError])
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusActive])
+
+	r.ReportVAPStatus(vapName, metrics.VAPStatusActive)
+	totals = r.vapRegistry.ComputeTotals()
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusError])
+	assert.Equal(t, int64(1), totals[metrics.VAPStatusActive])
+
+	r.DeleteVAPStatus(vapName)
+	totals = r.vapRegistry.ComputeTotals()
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusError])
+	assert.Equal(t, int64(0), totals[metrics.VAPStatusActive])
 }
 
 func TestVAPBMetrics(t *testing.T) {

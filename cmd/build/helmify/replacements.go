@@ -136,9 +136,9 @@ var replacements = map[string]string{
         - --operation=generate
         {{- end }}`,
 
-	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_ADMISSION_VIOLATION_EXPORT_ARGS": `{{ if hasKey .Values "enableAdmissionViolationExport" }}{{ if and .Values.enableAdmissionViolationExport (ne (.Values.exportBackend | default "" | lower) "disk") }}{{ fail "enableAdmissionViolationExport requires exportBackend to be disk" }}{{ end }}- --enable-admission-violation-export={{ .Values.enableAdmissionViolationExport }}{{ if .Values.enableAdmissionViolationExport }}
-        - --audit-connection={{ .Values.audit.connection }}
-        - --audit-channel={{ .Values.audit.channel }}
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_ADMISSION_VIOLATION_EXPORT_ARGS": `{{ with include "gatekeeper.exportFlag" (dict "value" .Values.enableAdmissionViolationExport "default" "") }}{{ if and (eq . "true") (ne ($.Values.exportBackend | default "" | lower) "disk") }}{{ fail "enableAdmissionViolationExport requires exportBackend to be disk" }}{{ end }}- --enable-admission-violation-export={{ . }}{{ if eq . "true" }}
+        - --audit-connection={{ $.Values.audit.connection }}
+        - --audit-channel={{ $.Values.audit.channel }}
   {{- end }}{{- end }}`,
 
 	"- HELMSUBST_AUDIT_OPERATIONS": `
@@ -152,8 +152,8 @@ var replacements = map[string]string{
         - --operation=status
         {{- end }}`,
 
-	"- HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS": `{{ if hasKey .Values "enableViolationExport" }}
-        - --enable-violation-export={{ .Values.enableViolationExport }}
+	"- HELMSUBST_DEPLOYMENT_AUDIT_VIOLATION_EXPORT_ARGS": `{{ with include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "") }}
+        - --enable-violation-export={{ . }}
         {{- end }}
         {{ if hasKey .Values.audit "connection" }}
         - --audit-connection={{ .Values.audit.connection }}
@@ -396,6 +396,11 @@ var replacements = map[string]string{
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
         {{- end }}`,
+
+	"        - HELMSUBST_DEPLOYMENT_VAP_GENERATION_MODE": "\n" +
+		"        {{- if hasKey .Values \"vapGenerationMode\"}}\n" +
+		"        - --vap-generation-mode={{ .Values.vapGenerationMode }}\n" +
+		"        {{- end }}",
 
 	"        - HELMSUBST_DEPLOYMENT_DEFAULT_K8S_NATIVE_VALIDATION_FAILURE_POLICY": "\n" +
 		"        {{- if hasKey .Values \"defaultK8sNativeValidationFailurePolicy\"}}\n" +

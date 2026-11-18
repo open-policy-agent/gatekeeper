@@ -35,31 +35,49 @@ const ConstraintsGroup = "constraints.gatekeeper.sh"
 type ConstraintPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// id is the name of the pod that generated this status.
 	ID string `json:"id,omitempty"`
-	// Storing the constraint UID allows us to detect drift, such as
+	// constraintUID is the UID of the Constraint this status reports on. Storing
+	// the constraint UID allows us to detect drift, such as
 	// when a constraint has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	ConstraintUID           types.UID                `json:"constraintUID,omitempty"`
-	Operations              []string                 `json:"operations,omitempty"`
-	Enforced                bool                     `json:"enforced,omitempty"`
-	Errors                  []Error                  `json:"errors,omitempty"`
-	ObservedGeneration      int64                    `json:"observedGeneration,omitempty"`
+	ConstraintUID types.UID `json:"constraintUID,omitempty"`
+	// operations lists the Gatekeeper operations assigned to the pod that generated
+	// this status.
+	Operations []string `json:"operations,omitempty"`
+	// enforced indicates whether the Constraint is currently enforced on this pod.
+	Enforced bool `json:"enforced,omitempty"`
+	// errors lists any errors encountered while adding the Constraint on this pod.
+	Errors []Error `json:"errors,omitempty"`
+	// observedGeneration is the generation of the Constraint that was last processed
+	// by this pod.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// enforcementPointsStatus reports the enforcement status of the Constraint for
+	// each configured enforcement point.
 	EnforcementPointsStatus []EnforcementPointStatus `json:"enforcementPointsStatus,omitempty"`
 }
 
 // Error represents a single error caught while adding a constraint to engine.
 type Error struct {
-	Code     string `json:"code"`
-	Message  string `json:"message"`
+	// code is a short identifier for the class of error.
+	Code string `json:"code"`
+	// message is a human-readable description of the error.
+	Message string `json:"message"`
+	// location is the resource or component associated with the error.
 	Location string `json:"location,omitempty"`
 }
 
 // EnforcementPointStatus represents the status of a single enforcement point.
 type EnforcementPointStatus struct {
-	EnforcementPoint   string `json:"enforcementPoint"`
-	State              string `json:"state"`
-	Message            string `json:"message,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	// enforcementPoint identifies the enforcement point this status applies to.
+	EnforcementPoint string `json:"enforcementPoint"`
+	// state is the current enforcement state for this enforcement point.
+	State string `json:"state"`
+	// message provides additional detail about the enforcement point state.
+	Message string `json:"message,omitempty"`
+	// observedGeneration is the generation of the Constraint that was last processed
+	// for this enforcement point.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -67,9 +85,11 @@ type EnforcementPointStatus struct {
 
 // ConstraintPodStatus is the Schema for the constraintpodstatuses API.
 type ConstraintPodStatus struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// status is the observed state of the Constraint for this pod.
 	Status ConstraintPodStatusStatus `json:"status,omitempty"`
 }
 

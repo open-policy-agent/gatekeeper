@@ -9,7 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdmissionExportFlagDefaults(t *testing.T) {
+func TestExportFlagDefaults(t *testing.T) {
+	require.Equal(t, "true", flag.CommandLine.Lookup("enable-violation-export").DefValue)
+	for _, name := range []string{"audit-connection", "audit-channel"} {
+		routingFlag := flag.CommandLine.Lookup(name)
+		require.NotNil(t, routingFlag)
+		require.Equal(t, name, routingFlag.DefValue)
+		require.Contains(t, routingFlag.Usage, "(beta)")
+	}
 	got := flag.CommandLine.Lookup("enable-admission-violation-export")
 	require.NotNil(t, got)
 	require.Equal(t, "false", got.DefValue)

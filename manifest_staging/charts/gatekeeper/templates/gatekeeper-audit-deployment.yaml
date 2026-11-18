@@ -63,8 +63,8 @@ spec:
         - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel
           .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName
-          }}
+        - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook
+          }}{{ .Values.validatingWebhookName }}{{ end }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         {{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}
@@ -85,8 +85,8 @@ spec:
         {{- if not .Values.audit.disableStatusOperation }}
         - --operation=status
         {{- end }}
-        {{ if hasKey .Values "enableViolationExport" }}
-        - --enable-violation-export={{ .Values.enableViolationExport }}
+        {{ with include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "") }}
+        - --enable-violation-export={{ . }}
         {{- end }}
         {{ if hasKey .Values.audit "connection" }}
         - --audit-connection={{ .Values.audit.connection }}
@@ -139,6 +139,10 @@ spec:
         
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}
+
+        {{- if hasKey .Values "vapGenerationMode"}}
+        - --vap-generation-mode={{ .Values.vapGenerationMode }}
         {{- end }}
         
         {{- range .Values.controllerManager.exemptNamespaces}}
@@ -223,11 +227,11 @@ spec:
           readOnly: true
         - mountPath: /tmp/audit
           name: tmp-volume
-        {{- if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
+        {{- if and (eq (include "gatekeeper.diskConnectionRendered" .) "true") (ne (include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "true")) "false") }}
         - mountPath: {{ .Values.audit.exportVolumeMount.path }}
           name: {{ .Values.audit.exportVolume.name }}
         {{- end }}
-      {{ if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") (not .Values.audit.disableAuditSidecar) }}
+      {{ if and (eq (include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "false")) "true") (eq (.Values.exportBackend | default "" | lower) "disk") (not .Values.audit.disableAuditSidecar) }}
       - {{ toYaml .Values.audit.exportSidecar | nindent 8 }}
       {{- end }}
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
@@ -251,7 +255,7 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
-      {{- if and (.Values.enableViolationExport) (eq (.Values.exportBackend | default "" | lower) "disk") }}
+      {{- if and (eq (include "gatekeeper.diskConnectionRendered" .) "true") (ne (include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "true")) "false") }}
       - {{- toYaml .Values.audit.exportVolume | nindent 8 }}
       {{- end }}
       {{- if .Values.audit.writeToRAMDisk }}

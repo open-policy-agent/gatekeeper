@@ -30,30 +30,32 @@ type AssignSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+	// applyTo lists the specific groups, versions and kinds a mutation will be applied to.
 	// This is necessary because every mutation implies part of an object schema and object
 	// schemas are associated with specific GVKs.
 	ApplyTo []match.MutationApplyTo `json:"applyTo,omitempty"`
 
-	// Match allows the user to limit which resources get mutated.
+	// match allows the user to limit which resources get mutated.
 	// Individual match criteria are AND-ed together. An undefined
 	// match criteria matches everything.
 	Match match.Match `json:"match,omitempty"`
 
-	// Location describes the path to be mutated, for example: `spec.containers[name: main]`.
+	// location describes the path to be mutated, for example: `spec.containers[name: main]`.
 	Location string `json:"location,omitempty"`
 
-	// Parameters define the behavior of the mutator.
+	// parameters define the behavior of the mutator.
 	Parameters Parameters `json:"parameters,omitempty"`
 }
 
 type Parameters struct {
+	// pathTests are a series of existence tests that can be checked
+	// before a mutation is applied.
 	PathTests []PathTest `json:"pathTests,omitempty"`
 
 	// TODO(maxsmythe): Now that https://github.com/kubernetes-sigs/controller-tools/pull/528
 	// is merged, we can use an actual object for `Assign`
 
-	// Assign.value holds the value to be assigned
+	// assign holds the value to be assigned via its `value` field.
 	Assign AssignField `json:"assign,omitempty"`
 }
 
@@ -68,7 +70,10 @@ type Parameters struct {
 // * MustExist    - the path must exist or do not mutate
 // * MustNotExist - the path must not exist or do not mutate.
 type PathTest struct {
-	SubPath   string           `json:"subPath,omitempty"`
+	// subPath is the path, relative to `location`, that must satisfy `condition`.
+	SubPath string `json:"subPath,omitempty"`
+	// condition describes whether the path either MustExist or MustNotExist
+	// in the original object.
 	Condition tester.Condition `json:"condition,omitempty"`
 }
 
@@ -77,6 +82,7 @@ type AssignStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// byPod lists the observed status of this Assign for each pod.
 	ByPod []v1beta1.MutatorPodStatusStatus `json:"byPod,omitempty"`
 }
 
@@ -84,10 +90,13 @@ type AssignStatus struct {
 
 // Assign is the Schema for the assign API.
 type Assign struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AssignSpec   `json:"spec,omitempty"`
+	// spec defines the desired state of Assign.
+	Spec AssignSpec `json:"spec,omitempty"`
+	// status is the observed state of Assign.
 	Status AssignStatus `json:"status,omitempty"`
 }
 

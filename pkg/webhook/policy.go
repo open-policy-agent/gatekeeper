@@ -107,7 +107,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 		scheme.Scheme,
 		corev1.EventSource{Component: "gatekeeper-webhook"})
 	var admissionExporter admissionViolationExporter
-	if *exportutil.AdmissionExportEnabled {
+	if exportutil.AdmissionExportEnabledForProcess() {
 		if deps.ExportSystem == nil {
 			return errors.New("admission violation export requires an export system")
 		}
@@ -947,10 +947,12 @@ func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid typ
 
 func AppendValidationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
 	if operations.IsAssigned(operations.Webhook) {
-		webhooks = append(webhooks, rotator.WebhookInfo{
-			Name: *VwhName,
-			Type: rotator.Validating,
-		})
+		if *VwhName != "" {
+			webhooks = append(webhooks, rotator.WebhookInfo{
+				Name: *VwhName,
+				Type: rotator.Validating,
+			})
+		}
 		for _, addlVwh := range strings.Split(*AdditionalVwhNamesToRotateCerts, ",") {
 			if addlVwh != *VwhName && addlVwh != "" {
 				webhooks = append(webhooks, rotator.WebhookInfo{

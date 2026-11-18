@@ -181,17 +181,55 @@ vap_admission_audit_configuration_ready() {
   ' <<<"${binding}" >/dev/null
 }
 
+vap_configmap_admission_enforced() {
+  local namespace="$1"
+  local policy_name="$2"
+  local binding_name="$3"
+  local output
+
+  if output="$(kubectl create configmap vap-exemption-probe --namespace "${namespace}" --dry-run=server 2>&1)"; then
+    return 1
+  fi
+
+  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* &&
+     "${output}" == *"missing required label"* ]]
+}
+
 vap_admission_enforced() {
   local resource_name="$1"
   local policy_name="$2"
   local binding_name="$3"
+  local warning_binding_name="${4:-}"
   local output
 
   if output="$(kubectl create namespace "${resource_name}" --dry-run=server 2>&1)"; then
     return 1
   fi
 
-  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* ]]
+  [[ "${output}" == *"ValidatingAdmissionPolicy '${policy_name}' with binding '${binding_name}' denied request"* ]] &&
+    [[ -z "${warning_binding_name}" ||
+       "${output}" == *"Warning: Validation failed for ValidatingAdmissionPolicy '${policy_name}' with binding '${warning_binding_name}':"* ]]
+}
+
+cleanup_vap_test() {
+  local cleanup_status=0
+  local crd
+  if crd="$(kubectl get crd k8srequiredlabelsvap.constraints.gatekeeper.sh --ignore-not-found -o name)"; then
+    if [[ -n "${crd}" ]]; then
+      kubectl delete --ignore-not-found --timeout=60s \
+        -f "${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding.yaml" \
+        -f "${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided_vapbinding_scoped.yaml" || cleanup_status=$?
+    fi
+  else
+    cleanup_status=1
+  fi
+  kubectl delete --ignore-not-found --timeout=60s \
+    -f "${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml" || cleanup_status=$?
+  kubectl delete --ignore-not-found --timeout=60s \
+    -f "${BATS_TESTS_DIR}/good/good_ns.yaml" \
+    -f "${BATS_TESTS_DIR}/bad/bad_ns.yaml" || cleanup_status=$?
+  kubectl delete pod temp --ignore-not-found --timeout=60s || cleanup_status=$?
+  return "${cleanup_status}"
 }
 
 vap_admission_audit_annotations_match() {
@@ -358,10 +396,7 @@ total_violations() {
   audit_id="$(jq -r '.status.auditTimestamp // empty' <<<"${constraint}")" || return 1
   [[ -n "${audit_id}" ]] || return 1
   violations=""
-  if [[ "${backend}" == "dapr" ]]; then
-    export_logs="$(kubectl logs -n fake-subscriber -l app=sub -c go-sub --tail=-1)" || return 1
-    violations="$(awk -v audit_id="${audit_id}" -v constraint_name="${constraint_name}" 'index($0, "ID:\"" audit_id "\"") && index($0, "EventType:\"violation_audited\"") && index($0, "Name:\"" constraint_name "\"") {count++} END {print count+0}' <<<"${export_logs}")"
-  elif [[ "${backend}" == "disk" ]]; then
+  if [[ "${backend}" == "disk" ]]; then
     export_logs="$(kubectl logs -n gatekeeper-system -l gatekeeper.sh/operation=audit -c reader --tail=-1)" || return 1
     violations="$(awk -v audit_id="${audit_id}" -v constraint_name="${constraint_name}" 'index($0, "\"id\":\"" audit_id "\"") && index($0, "\"eventType\":\"violation_audited\"") && index($0, "\"name\":\"" constraint_name "\"") {count++} END {print count+0}' <<<"${export_logs}")"
   else
@@ -395,4 +430,58 @@ admission_export_connection_ready() {
   ready_pods="$(kubectl get pods -n "${GATEKEEPER_NAMESPACE}" -l control-plane=controller-manager -ojson | jq '[.items[] | select(.status.phase == "Running") | select(any(.status.containerStatuses[]?; .name == "manager" and .ready == true)) | .metadata.name]')"
   [[ "$(jq 'length' <<<"${ready_pods}")" -gt 0 ]] || return 1
   kubectl get connection "${connection}" -n "${GATEKEEPER_NAMESPACE}" -ojson | jq -e --argjson ready "${ready_pods}" '.metadata.generation as $generation | [.status.byPod[]? | select(.observedGeneration == $generation) | select((.operations // []) | index("webhook")) | select(((.connectionErrors // []) | length) == 0) | .id] as $reconciled | ($ready - $reconciled | length) == 0'
+}
+
+audit_logs() {
+  kubectl logs -n "${GATEKEEPER_NAMESPACE}" -l control-plane=audit-controller -c manager --tail=-1
+}
+
+audit_log_records() {
+  local logs
+  logs="$(audit_logs)" || return 1
+  # DEBUG uses console-prefixed JSON; startup output can also contain plain text.
+  jq -Rc '(fromjson? // (split("\t") | last | fromjson?)) | select(type == "object")' <<<"${logs}"
+}
+
+audit_export_enabled() {
+  local deployment
+  deployment="$(kubectl -n "${GATEKEEPER_NAMESPACE}" get deployment gatekeeper-audit -ojson)" || return 1
+  jq -er '
+    [.spec.template.spec.containers[]? | select(.name == "manager")] as $managers
+    | if ($managers | length) != 1 then
+        error("expected one audit manager container")
+      else ($managers[0].args // []) end
+    | map(select(test("^--?enable-violation-export($|=)")))
+    | (last // "--enable-violation-export=true")
+    | if test("^--?enable-violation-export$") then "true"
+      else
+        sub("^--?enable-violation-export="; "") as $value
+        | if (["true", "True", "TRUE", "t", "T", "1"] | index($value)) != null then "true"
+          elif (["false", "False", "FALSE", "f", "F", "0"] | index($value)) != null then "false"
+          else error("invalid audit export flag value: " + $value) end
+      end
+  ' <<<"${deployment}"
+}
+
+audit_constraint_run_finished() {
+  local kind="$1" name="$2" resource="$3" after="$4"
+  local constraint logs
+  constraint="$(kubectl get "${kind}" "${name}" -ojson)" || return 1
+  logs="$(audit_log_records)" || return 1
+  jq -ers --argjson constraint "${constraint}" --arg name "${name}" --arg resource "${resource}" --arg after "${after}" '
+    $constraint.status.auditTimestamp as $id
+    | select(($id | type) == "string" and $id > $after)
+    | select(any($constraint.status.violations[]?; .name == $resource))
+    | select(any(.[]; .event_type == "violation_audited" and .audit_id == $id
+        and .constraint_name == $name and .resource_name == $resource))
+    | select(any(.[]; .event_type == "audit_finished" and .audit_id == $id))
+    | $id
+  ' <<<"${logs}"
+}
+
+# Requires the temp curl pod.
+audit_metrics() {
+  local pod_ip
+  pod_ip="$(kubectl -n "${GATEKEEPER_NAMESPACE}" get pod -l control-plane=audit-controller -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
+  kubectl exec temp -- curl -s "http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics"
 }

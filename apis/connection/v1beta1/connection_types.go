@@ -1,0 +1,66 @@
+/*
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1beta1
+
+import (
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// ConnectionSpec defines the desired state of Connection.
+type ConnectionSpec struct {
+	// driver is the name of one of the expected drivers i.e. disk
+	// +kubebuilder:validation:Required
+	Driver string `json:"driver"`
+	// config is the driver-specific configuration for this connection.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Config *types.Anything `json:"config"`
+}
+
+// ConnectionStatus defines the observed state of Connection.
+type ConnectionStatus struct {
+	// byPod lists the observed status of this Connection for each pod.
+	ByPod []statusv1alpha1.ConnectionPodStatusStatus `json:"byPod,omitempty"`
+}
+
+// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:storageversion
+
+// Connection is the Schema for the connections API.
+type Connection struct {
+	metav1.TypeMeta `json:",inline"`
+	// metadata is the standard object metadata.
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// spec defines the desired state of Connection.
+	Spec ConnectionSpec `json:"spec,omitempty"`
+	// status is the observed state of Connection.
+	Status ConnectionStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// ConnectionList contains a list of Connection.
+type ConnectionList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Connection `json:"items"`
+}

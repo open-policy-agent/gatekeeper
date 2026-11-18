@@ -6,10 +6,16 @@ BATS_TESTS_DIR=${BATS_TESTS_DIR:-test/bats/tests}
 WAIT_TIME=120
 SLEEP_TIME=1
 CLEAN_CMD="echo cleaning..."
+CLEANUP_VAP_TEST=false
 GATEKEEPER_NAMESPACE=${GATEKEEPER_NAMESPACE:-gatekeeper-system}
 
 teardown() {
-  bash -c "${CLEAN_CMD}"
+  local cleanup_status=0
+  if [[ "${CLEANUP_VAP_TEST}" == true ]]; then
+    cleanup_vap_test || cleanup_status=$?
+  fi
+  bash -c "${CLEAN_CMD}" || cleanup_status=$?
+  return "${cleanup_status}"
 }
 
 teardown_file() {
@@ -171,6 +177,70 @@ teardown_file() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vap_multiple_binding_audit_annotation_matches ${multiple_resource_name} ${policy_name}"
 }
 
+@test "Helm renders explicit webhook-independent VAP generation" {
+  command -v helm >/dev/null || skip "helm is not available"
+  command -v yq >/dev/null || skip "yq is not available"
+
+  local disabled webhook_name operation expected_name expected_count rendered
+  for disabled in false true; do
+    for webhook_name in gatekeeper-validating-webhook-configuration custom-validating-webhook; do
+      for operation in install upgrade; do
+        local helm_args=(--namespace "${GATEKEEPER_NAMESPACE}" --set "disableValidatingWebhook=${disabled}" --set "validatingWebhookName=${webhook_name}" --set defaultCreateVAPForTemplates=true --set syncVAPEnforcementScope=true)
+        if [[ "${operation}" == upgrade ]]; then
+          helm_args+=(--is-upgrade)
+        fi
+        expected_name="${webhook_name}"
+        expected_count=1
+        if [[ "${disabled}" == true ]]; then
+          expected_name=""
+          expected_count=0
+        fi
+        rendered="$(helm template gatekeeper manifest_staging/charts/gatekeeper "${helm_args[@]}" | yq eval -o=json -I=0 '.' - | jq -s '.')"
+        run jq -e --arg name "${expected_name}" --argjson count "${expected_count}" '
+          ([.[] | select(.kind == "ValidatingWebhookConfiguration")] | length) == $count and
+          ([.[] | select(.kind == "Deployment") | .spec.template.spec.containers[] | select(.name == "manager") | .args[] | select(startswith("--validating-webhook-configuration-name="))] == ["--validating-webhook-configuration-name=" + $name, "--validating-webhook-configuration-name=" + $name]) and
+          any(.[]; .kind == "Deployment" and .metadata.name == "gatekeeper-audit" and
+            any(.spec.template.spec.containers[]; .name == "manager" and
+              (.args | index("--operation=generate")) != null and
+              (.args | index("--sync-vap-enforcement-scope=true")) != null and
+              (.args | index("--default-create-vap-for-templates=true")) != null))
+        ' <<<"${rendered}"
+        assert_success
+      done
+    done
+  done
+}
+
+@test "Helm rejects the removed Dapr export backend" {
+  command -v helm >/dev/null || skip "helm is not available"
+
+  local operation backend
+  for operation in install upgrade; do
+    local helm_args=(template gatekeeper manifest_staging/charts/gatekeeper --namespace "${GATEKEEPER_NAMESPACE}")
+    if [[ "${operation}" == upgrade ]]; then
+      helm_args+=(--is-upgrade)
+    fi
+    for backend in dapr DAPR Dapr; do
+      run helm "${helm_args[@]}" --set enableViolationExport=true --set "exportBackend=${backend}"
+      assert_failure
+      assert_match 'exportBackend dapr is no longer supported' "${output}"
+
+      run helm "${helm_args[@]}" --set enableAdmissionViolationExport=true --set "exportBackend=${backend}"
+      assert_failure
+      assert_match 'exportBackend (dapr is no longer supported|to be disk)' "${output}"
+
+      run helm "${helm_args[@]}" --set enableViolationExport=false --set enableAdmissionViolationExport=false --set "exportBackend=${backend}"
+      assert_success
+    done
+
+    # Audit export without a chart-managed disk Connection still renders.
+    run helm "${helm_args[@]}" --set enableViolationExport=true
+    assert_success
+    run helm "${helm_args[@]}" --set enableViolationExport=true --set exportBackend=custom
+    assert_success
+  done
+}
+
 @test "vap test" {
   if [ -z $ENABLE_VAP_TESTS ]; then
     skip "skipping vap tests"
@@ -179,6 +249,7 @@ teardown_file() {
   if [[ -z "$api" ]]; then
     echo "vap is not enabled for the cluster. skip vap test"
   else
+    CLEANUP_VAP_TEST=true
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync_with_exclusion_exact_match.yaml"
 
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_vap.yaml"
@@ -228,7 +299,11 @@ teardown_file() {
 
     # Verify VAPB metrics with status=active shows at least 2 (we created 2 bindings)
     wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "vapb_count=\$(kubectl exec temp -- curl -s http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep -E '^gatekeeper_validating_admission_policy_bindings\{status=\"active\"\}' | awk '{print \$2}' | tr -d '\r'); [ -n \"\$vapb_count\" ] && [ \"\$vapb_count\" -gt 1 ]"
-    
+
+    local bad_namespace
+    bad_namespace="$(kubectl create --dry-run=client -f "${BATS_TESTS_DIR}/bad/bad_ns.yaml" -o jsonpath='{.metadata.name}')"
+    wait_for_process "${WAIT_TIME}" "${SLEEP_TIME}" "vap_admission_enforced '${bad_namespace}' 'gatekeeper-k8srequiredlabelsvap' 'gatekeeper-k8srequiredlabelsvap-all-must-have-label' 'gatekeeper-k8srequiredlabelsvap-all-must-have-label-scoped'"
+
     run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
     assert_match 'Warning' "${output}"
     assert_match 'denied' "${output}"
@@ -986,6 +1061,67 @@ __expansion_audit_test() {
 
   run kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template_with_update_operations.yaml
   run kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_label_provided.yaml
+}
+
+@test "audit export without a connection test" {
+  if [ -n "${ENABLE_EXPORT_TESTS:-}" ] || [ -n "${ENABLE_ADMISSION_EXPORT_TESTS:-}" ]; then
+    skip "skipping test, export tests create a connection"
+  fi
+
+  run audit_export_enabled
+  assert_success
+  local export_enabled="${output}"
+  local constraint="audit-export-requires-label"
+  local resource="gatekeeper-audit-export-test"
+  CLEAN_CMD="kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/constraints/audit_export_requires_label.yaml; kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/audit_export_ns.yaml; ${CLEAN_CMD}"
+  kubectl apply -f "${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh"
+  kubectl apply -f "${BATS_TESTS_DIR}/constraints/audit_export_requires_label.yaml"
+  kubectl apply -f "${BATS_TESTS_DIR}/bad/audit_export_ns.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels ${constraint}"
+
+  run audit_log_records
+  assert_success
+  run jq -rs '[.[] | .audit_id | select(type == "string")] | max // ""' <<<"${output}"
+  assert_success
+  local previous="${output}" check
+  for _ in 1 2 3; do
+    printf -v check 'audit_constraint_run_finished %q %q %q %q' k8srequiredlabels "${constraint}" "${resource}" "${previous}"
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "${check}"
+    run audit_constraint_run_finished k8srequiredlabels "${constraint}" "${resource}" "${previous}"
+    assert_success
+    previous="${output}"
+  done
+
+  local logs
+  logs="$(audit_logs)"
+  run grep -E 'failed to (export audit violation|write export errors|close connection|upsert connection)|unsupported connection|Reconciler error.*export-connection-controller' <<<"${logs}"
+  assert_failure
+
+  run kubectl get connectionpodstatuses -n ${GATEKEEPER_NAMESPACE} -ojson
+  assert_success
+  assert_equal "0" "$(jq '.items | length' <<<"${output}")"
+
+  CLEAN_CMD="kubectl delete pod temp --ignore-not-found; ${CLEAN_CMD}"
+  kubectl get pod temp >/dev/null 2>&1 || kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl wait --for=condition=Ready --timeout=60s pod temp
+
+  if [[ "${export_enabled}" == true ]]; then
+    wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "audit_metrics | grep -qxF 'gatekeeper_export_connection_state{state=\"not_configured\"} 1'"
+  fi
+  local metrics
+  run audit_metrics
+  assert_success
+  metrics="${output}"
+  if [[ "${export_enabled}" == true ]]; then
+    run grep -xF 'gatekeeper_audit_export_published_count_total 0' <<<"${metrics}"
+    assert_success
+    run grep -xF 'gatekeeper_audit_export_publish_error_count_total 0' <<<"${metrics}"
+    assert_success
+  else
+    run grep -E '^gatekeeper_(export_connection_state|audit_export_(published|publish_error)_count_total)([{[:space:]])' <<<"${metrics}"
+    assert_failure
+  fi
 }
 
 @test "shutdown delay"  {

@@ -7,7 +7,6 @@ GHCR_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper
 GHCR_CRD_REPOSITORY ?= ghcr.io/open-policy-agent/gatekeeper-crds
 GHCR_GATOR_REPOSITORY ?= ghcr.io/open-policy-agent/gator
 GHCR_FAKE_READER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-reader
-GHCR_FAKE_SUBSCRIBER_REPOSITORY ?= ghcr.io/open-policy-agent/fake-subscriber
 
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
@@ -17,7 +16,7 @@ PUSH_TO_GHCR ?= false
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
-ENABLE_EXPORT ?= false
+ENABLE_EXPORT ?=
 ENABLE_ADMISSION_EXPORT ?= false
 EMIT_ADMISSION_AUDIT_ANNOTATIONS ?= false
 ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS ?= false
@@ -33,20 +32,20 @@ VERSION := v3.24.0-beta.0
 KIND_VERSION ?= 0.33.0
 KIND_CLUSTER_FILE ?= ""
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.33.0
+KUBERNETES_VERSION ?= 1.37.0
+# envtest pinned to 1.33: unit tests use v1beta1 VAP APIs.
+ENVTEST_KUBERNETES_VERSION ?= 1.33.0
 KUSTOMIZE_VERSION ?= 5.8.1
 BATS_VERSION ?= 1.14.0
 ORAS_VERSION ?= 1.3.4
-BATS_TESTS_FILE ?= test/bats/test.bats
+# Run all suites locally; CI selects separate files for the core and VAP-scope matrices.
+BATS_TESTS_FILE ?= test/bats/test.bats test/bats/vap_scope.bats
 HELM_VERSION ?= 4.2.3
 NODE_VERSION ?= 24-bullseye-slim
 YQ_VERSION ?= 4.53.3
 
 HELM_ARGS ?=
 HELM_TIMEOUT ?= 5m
-HELM_DAPR_EXPORT_ARGS := --set-string auditPodAnnotations.dapr\\.io/enabled=true \
-	--set-string auditPodAnnotations.dapr\\.io/app-id=audit \
-	--set-string auditPodAnnotations.dapr\\.io/metrics-port=9999 \
 
 HELM_DISK_SHARED_EXPORT_ARGS = --set audit.exportVolumeMount.path=${EXPORT_DISK_MOUNT} \
 	--set audit.exportConnection.path=${EXPORT_DISK_PATH} \
@@ -60,7 +59,7 @@ HELM_DISK_ADMISSION_EXPORT_ARGS = --set admission.disableExportSidecar=false \
 	--set admission.exportSidecar.image=${FAKE_READER_IMAGE} \
 	--set admission.exportSidecar.imagePullPolicy=${FAKE_READER_IMAGE_PULL_POLICY} \
 
-HELM_EXPORT_ARGS := --set enableViolationExport=${ENABLE_EXPORT} \
+HELM_EXPORT_ARGS := $(if $(ENABLE_EXPORT),--set enableViolationExport=${ENABLE_EXPORT}) \
 	--set audit.connection=${AUDIT_CONNECTION} \
 	--set audit.channel=${AUDIT_CHANNEL} \
 	--set enableAdmissionViolationExport=${ENABLE_ADMISSION_EXPORT} \
@@ -97,7 +96,6 @@ GOLANGCI_LINT_VERSION := v2.9.0
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 
 BENCHMARK_FILE_NAME ?= benchmarks.txt
-FAKE_SUBSCRIBER_IMAGE ?= fake-subscriber:latest
 FAKE_READER_IMAGE ?= fake-reader:latest
 FAKE_READER_IMAGE_PULL_POLICY ?= IfNotPresent
 
@@ -202,21 +200,21 @@ all: lint test manager
 # Run tests with coverage
 .PHONY: native-test
 native-test: envtest
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test . ./pkg/... ./apis/... ./cmd/gator/... -coverprofile cover.out
 
 # Run tests with race detector
 .PHONY: native-race-test
 native-race-test: envtest
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test . ./pkg/... ./apis/... ./cmd/gator/... -race -timeout 20m
 
 # Run benchmarks only (no unit tests)
 .PHONY: native-bench-test
 native-bench-test: envtest
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 	GO111MODULE=on \
 	go test ./pkg/... ./apis/... ./cmd/gator/... -bench . -run "^$$"
 
@@ -319,13 +317,13 @@ ifneq ($(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),)
 		$(HELM_EXPORT_ARGS) \
 		$(if $(and $(filter true,$(ENABLE_EXPORT) $(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_SHARED_EXPORT_ARGS)) \
 		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_AUDIT_EXPORT_ARGS)) \
-		$(if $(and $(filter true,$(ENABLE_EXPORT)),$(filter dapr,$(EXPORT_BACKEND))),$(HELM_DAPR_EXPORT_ARGS)) \
 		$(if $(and $(filter true,$(ENABLE_ADMISSION_EXPORT)),$(filter disk,$(EXPORT_BACKEND))),$(HELM_DISK_ADMISSION_EXPORT_ARGS)) \
 		$(HELM_EXTRA_ARGS)
 else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait --timeout ${HELM_TIMEOUT} \
+		$(if $(ENABLE_EXPORT),--set enableViolationExport=${ENABLE_EXPORT}) \
 		$(HELM_EXTRA_ARGS)
 endif
 
@@ -352,24 +350,6 @@ e2e-helm-upgrade:
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
 		$(HELM_EXTRA_ARGS)
-
-e2e-subscriber-build-load-image:
-	docker buildx build --platform="linux/amd64" -t ${FAKE_SUBSCRIBER_IMAGE} --load -f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
-	kind load docker-image --name kind ${FAKE_SUBSCRIBER_IMAGE}
-
-e2e-subscriber-deploy:
-	kubectl create ns fake-subscriber
-	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: fake-subscriber/' | kubectl apply -f -
-	kubectl apply -f test/export/fake-subscriber/manifest/subscriber.yaml
-
-e2e-publisher-component-deploy:
-	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
-	yq 'select(.kind == "Component")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
-
-e2e-publisher-connection-deploy:
-	yq 'select(.kind == "Connection")' test/export/fake-subscriber/manifest/publish-components.yaml | kubectl apply -f -
-
-e2e-publisher-deploy: e2e-publisher-component-deploy e2e-publisher-connection-deploy
 
 e2e-reader-build-image:
 	docker buildx build --platform="$(PLATFORM)" -t ${FAKE_READER_IMAGE} --load -f test/export/fake-reader/Dockerfile test/export/fake-reader
@@ -435,12 +415,26 @@ lint:
 		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION} \
 		golangci-lint run -v --fix --concurrency 2
 
+# lint-kube-api builds a golangci-lint binary with the kube-api-linter module
+# (https://github.com/kubernetes-sigs/kube-api-linter) plugged in, and runs it
+# against the API type definitions in ./apis, checking them against
+# Kubernetes API conventions. Requires a local Go toolchain; unlike `lint`
+# this isn't dockerized because the module plugin build needs `go` and `git`
+# on the host. The golangci-lint version comes from GOLANGCI_LINT_VERSION (it
+# is deliberately not set in .custom-gcl.yml, so pass --version if you run
+# `golangci-lint custom` by hand).
+.PHONY: lint-kube-api
+lint-kube-api:
+	GOBIN=$(shell pwd)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+	./bin/golangci-lint custom --version ${GOLANGCI_LINT_VERSION}
+	./bin/golangci-lint-kube-api-linter run -c .golangci-kube-api-linter.yaml --fix ./apis/...
+
 # Generate code
 generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
 		--output-base=/gatekeeper \
-		--input-dirs=./apis/mutations/v1,./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1,./apis/syncset/v1alpha1,./apis/gvkmanifest/v1alpha1 \
+		--input-dirs=./apis/mutations/v1,./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1,./apis/syncset/v1alpha1,./apis/gvkmanifest/v1alpha1,./apis/connection/v1alpha1,./apis/connection/v1beta1 \
 		--go-header-file=./hack/boilerplate.go.txt \
 		--output-file-base=zz_generated.conversion
 
@@ -560,15 +554,6 @@ docker-buildx-fake-reader: docker-buildx-builder
 		--output=$(OUTPUT_TYPE) \
 		-t ${GHCR_FAKE_READER_REPOSITORY}:latest \
 		-f test/export/fake-reader/Dockerfile test/export/fake-reader
-
-# Build fake-subscriber image
-docker-buildx-fake-subscriber: docker-buildx-builder
-	docker buildx build \
-		$(_ATTESTATIONS) \
-		--platform="$(PLATFORM)" \
-		--output=$(OUTPUT_TYPE) \
-		-t ${GHCR_FAKE_SUBSCRIBER_REPOSITORY}:latest \
-		-f test/export/fake-subscriber/Dockerfile test/export/fake-subscriber
 
 # Update manager_image_patch.yaml with image tag
 patch-image:

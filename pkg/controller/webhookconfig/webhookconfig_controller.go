@@ -253,20 +253,21 @@ func (r *ReconcileWebhookConfig) Reconcile(ctx context.Context, request reconcil
 
 		if gatekeeperWebhook == nil {
 			logger.Info("webhook not found", "name", webhook.ValidatingWebhookName)
-			return reconcile.Result{}, nil
-		}
-
-		newConfig := webhookconfigcache.WebhookMatchingConfig{
-			NamespaceSelector: gatekeeperWebhook.NamespaceSelector,
-			ObjectSelector:    gatekeeperWebhook.ObjectSelector,
-			Rules:             gatekeeperWebhook.Rules,
-			MatchPolicy:       gatekeeperWebhook.MatchPolicy,
-			MatchConditions:   gatekeeperWebhook.MatchConditions,
-		}
-
-		if r.cache.UpsertConfig(request.Name, newConfig) {
-			logger.Info("ValidatingWebhookConfiguration matching fields changed", "storedKey", request.Name)
+			r.cache.RemoveConfig(request.Name)
 			configChanged = true
+		} else {
+			newConfig := webhookconfigcache.WebhookMatchingConfig{
+				NamespaceSelector: gatekeeperWebhook.NamespaceSelector,
+				ObjectSelector:    gatekeeperWebhook.ObjectSelector,
+				Rules:             gatekeeperWebhook.Rules,
+				MatchPolicy:       gatekeeperWebhook.MatchPolicy,
+				MatchConditions:   gatekeeperWebhook.MatchConditions,
+			}
+
+			if r.cache.UpsertConfig(request.Name, newConfig) {
+				logger.Info("ValidatingWebhookConfiguration matching fields changed", "storedKey", request.Name)
+				configChanged = true
+			}
 		}
 	}
 

@@ -10,12 +10,15 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
+	constrainttypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -70,6 +73,50 @@ func BenchmarkWriteObjectsSpoolFormats(b *testing.B) {
 			require.NoError(b, am.writeUnstructuredList(spoolDir, objects))
 		}
 	})
+}
+
+// BenchmarkAuditExportWithoutConnection compares an audit run's violation
+// handling with export disabled and with export enabled but no Connection.
+func BenchmarkAuditExportWithoutConnection(b *testing.B) {
+	const violationCount = 500
+	violations := benchmarkViolations(violationCount)
+
+	for _, bc := range []struct {
+		name          string
+		exportEnabled bool
+	}{
+		{name: "export_disabled", exportEnabled: false},
+		{name: "export_enabled_not_configured", exportEnabled: true},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			oldExportEnabled := *exportutil.ExportEnabled
+			*exportutil.ExportEnabled = bc.exportEnabled
+			b.Cleanup(func() { *exportutil.ExportEnabled = oldExportEnabled })
+
+			am := &Manager{exportSystem: export.NewSystem(), log: logr.Discard()}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				state := &auditExportPublishingState{Errors: map[string]error{}}
+				am.startAuditExport(state, "benchmark-timestamp")
+				am.addAuditResponsesToUpdateLists(map[util.KindVersionName]*LimitQueue{}, violations, map[util.KindVersionName]int64{}, map[util.EnforcementAction]int64{}, "benchmark-timestamp", state)
+				am.finishAuditExport(context.Background(), state, "benchmark-timestamp")
+			}
+		})
+	}
+}
+
+func benchmarkViolations(count int) []Result {
+	constraint := &unstructured.Unstructured{}
+	constraint.SetGroupVersionKind(schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: "K8sRequiredLabels"})
+	constraint.SetName("required-labels")
+
+	objects := benchmarkNamespaceObjects(count)
+	violations := make([]Result, count)
+	for i := range violations {
+		violations[i] = Result{Result: &constrainttypes.Result{Constraint: constraint, Msg: "missing label", EnforcementAction: string(util.Deny)}, obj: &objects[i]}
+	}
+	return violations
 }
 
 func runReviewObjectsBenchmark(b *testing.B, rootDir string) {
