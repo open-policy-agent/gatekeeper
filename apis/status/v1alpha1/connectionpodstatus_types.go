@@ -16,6 +16,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"crypto/sha256"
+	"fmt"
+
 	"github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
@@ -23,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -142,5 +146,15 @@ func NewConnectionStatusForPod(pod *corev1.Pod, connectionNamespace, connectionN
 
 // KeyForConnection returns a unique status object name given the Pod ID and a connection object.
 func KeyForConnection(id string, connectionNamespace string, connectionName string) (string, error) {
-	return v1beta1.DashPacker(id, connectionNamespace, connectionName)
+	key, err := v1beta1.DashPacker(id, connectionNamespace, connectionName)
+	if err != nil {
+		return "", err
+	}
+	if len(key) <= validation.DNS1123SubdomainMaxLength {
+		return key, nil
+	}
+	// Preserve every valid legacy key. Hash the unambiguous packed tuple only
+	// when dash escaping exceeds the API name limit. The single separator
+	// keeps this format disjoint from legacy keys, which have at least two.
+	return fmt.Sprintf("connection-%x", sha256.Sum256([]byte(key))), nil
 }

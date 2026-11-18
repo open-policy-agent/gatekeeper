@@ -45,7 +45,6 @@ type ConnectionStatus struct {
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
 // Connection is the Schema for the connections API.
 type Connection struct {
 	metav1.TypeMeta `json:",inline"`

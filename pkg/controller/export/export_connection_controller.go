@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
-	connectionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1alpha1"
+	connectionv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/connection/v1beta1"
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/v3/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/connectionstatus"
@@ -126,19 +126,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler, connectionName string) err
 	}
 	err = c.Watch(
 		source.Kind(
-			mgr.GetCache(), &connectionv1alpha1.Connection{},
-			&handler.TypedEnqueueRequestForObject[*connectionv1alpha1.Connection]{},
-			predicate.TypedFuncs[*connectionv1alpha1.Connection]{
-				CreateFunc: func(e event.TypedCreateEvent[*connectionv1alpha1.Connection]) bool {
+			mgr.GetCache(), &connectionv1beta1.Connection{},
+			&handler.TypedEnqueueRequestForObject[*connectionv1beta1.Connection]{},
+			predicate.TypedFuncs[*connectionv1beta1.Connection]{
+				CreateFunc: func(e event.TypedCreateEvent[*connectionv1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				UpdateFunc: func(e event.TypedUpdateEvent[*connectionv1alpha1.Connection]) bool {
+				UpdateFunc: func(e event.TypedUpdateEvent[*connectionv1beta1.Connection]) bool {
 					return e.ObjectNew.GetNamespace() == util.GetNamespace() && connectionUpdateRequiresReconcile(e.ObjectOld, e.ObjectNew)
 				},
-				DeleteFunc: func(e event.TypedDeleteEvent[*connectionv1alpha1.Connection]) bool {
+				DeleteFunc: func(e event.TypedDeleteEvent[*connectionv1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
-				GenericFunc: func(e event.TypedGenericEvent[*connectionv1alpha1.Connection]) bool {
+				GenericFunc: func(e event.TypedGenericEvent[*connectionv1beta1.Connection]) bool {
 					return e.Object.GetNamespace() == util.GetNamespace()
 				},
 			},
@@ -186,7 +186,7 @@ func seedConnectionSource(connectionName string) source.Source {
 
 // connectionUpdateRequiresReconcile reconciles only on spec changes (generation)
 // or a recreate (UID), skipping the status update that follows every publish.
-func connectionUpdateRequiresReconcile(oldConn, newConn *connectionv1alpha1.Connection) bool {
+func connectionUpdateRequiresReconcile(oldConn, newConn *connectionv1beta1.Connection) bool {
 	if oldConn == nil || newConn == nil {
 		return true
 	}
@@ -213,7 +213,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.log.Info("Reconcile request", "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
-	connObj := &connectionv1alpha1.Connection{}
+	connObj := &connectionv1beta1.Connection{}
 	err := r.reader.Get(ctx, request.NamespacedName, connObj)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -276,7 +276,7 @@ func UpdateOrCreateConnectionPodStatus(
 		Namespace: util.GetNamespace(),
 		Name:      connObjName,
 	}
-	connObj := &connectionv1alpha1.Connection{}
+	connObj := &connectionv1beta1.Connection{}
 	err := reader.Get(ctx, request, connObj)
 	if err != nil {
 		return err
@@ -308,7 +308,7 @@ func UpdateConnectionPodPublishStatus(
 	return retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)
 	}, func() error {
-		connObj := &connectionv1alpha1.Connection{}
+		connObj := &connectionv1beta1.Connection{}
 		if err := reader.Get(ctx, request, connObj); err != nil {
 			if apierrors.IsNotFound(err) {
 				return fmt.Errorf("%w: %w", ErrConnectionNotFound, err)
@@ -323,7 +323,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	reader client.Reader,
 	writer client.Writer,
 	scheme *runtime.Scheme,
-	connObj *connectionv1alpha1.Connection,
+	connObj *connectionv1beta1.Connection,
 	connectionErrors []*statusv1alpha1.ConnectionError,
 	publishStatus *statusv1alpha1.ConnectionPublishStatus,
 	getPod func(context.Context) (*corev1.Pod, error),
@@ -391,7 +391,7 @@ func updateOrCreateConnectionPodStatus(ctx context.Context,
 	return writer.Update(ctx, connPodStatusObj)
 }
 
-func repairConnectionPodStatusMetadata(scheme *runtime.Scheme, status *statusv1alpha1.ConnectionPodStatus, pod *corev1.Pod, connObj *connectionv1alpha1.Connection) error {
+func repairConnectionPodStatusMetadata(scheme *runtime.Scheme, status *statusv1alpha1.ConnectionPodStatus, pod *corev1.Pod, connObj *connectionv1beta1.Connection) error {
 	mergeLabels(status, map[string]string{
 		statusv1beta1.ConnectionNameLabel: connObj.GetName(),
 		statusv1beta1.PodLabel:            pod.Name,
@@ -472,7 +472,7 @@ func deleteStatus(ctx context.Context,
 
 func newConnectionPodStatus(scheme *runtime.Scheme,
 	pod *corev1.Pod,
-	connObj *connectionv1alpha1.Connection,
+	connObj *connectionv1beta1.Connection,
 ) (*statusv1alpha1.ConnectionPodStatus, error) {
 	connPodStatusObj, err := statusv1alpha1.NewConnectionStatusForPod(pod, connObj.GetNamespace(), connObj.GetName(), scheme)
 	if err != nil {

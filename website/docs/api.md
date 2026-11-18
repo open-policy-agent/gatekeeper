@@ -218,14 +218,16 @@ See [ExpansionTemplate behavior](expansion.md#expansiontemplate-explained).
 
 ---
 
-## Connection (`connection.gatekeeper.sh/v1alpha1`)
+## Connection (`connection.gatekeeper.sh`)
+
+Preferred and storage version: `v1beta1` (also served: `v1alpha1`).
 
 | Field | Type | Description |
 | ----- | ---- | ----------- |
 | `spec.driver` | string | Required export driver name: `disk` |
 | `spec.config` | object | Required driver-specific configuration (preserved unknown fields); see [export configuration](export.md#setting-up-audit-to-export-violations) |
 
-Create the Connection in Gatekeeper's namespace and select its name with `--audit-connection`. See [Export](export.md) for driver configuration and enablement.
+Create the Connection in Gatekeeper's namespace and select its name with `--audit-connection`. Both API versions expose the same spec/status fields. See [Export](export.md) for driver configuration and enablement, and [storage migration and rollback](export.md#connection-api-versions-and-storage-migration) before upgrading an existing deployment.
 
 ---
 
