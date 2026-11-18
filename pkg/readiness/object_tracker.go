@@ -419,7 +419,7 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 			}
 			if !found {
 				// errors.Wrapf returns nil for a nil error, so this case needs its own error.
-				return objKey{}, errors.Errorf("retrieving nested CRD Kind field for unstructured: spec.crd.spec.names.kind not found. Object: %v", obj)
+				return objKey{}, errors.Errorf("retrieving nested CRD Kind field for unstructured: spec.crd.spec.names.kind not found. Name: %q", v.GetName())
 			}
 			gvk = schema.GroupVersionKind{
 				Group:   constraintGroup,
