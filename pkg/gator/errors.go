@@ -21,6 +21,8 @@ var (
 	// ErrNotAnExpansion indicates the user-indicated file does not contain an
 	// ExpansionTemplate.
 	ErrNotAnExpansion = errors.New("not an Expansion Template")
+	// ErrNotAProvider indicates an object is not a supported Provider.
+	ErrNotAProvider = errors.New("not a Provider")
 	// ErrAddingTemplate indicates a problem instantiating a Suite's ConstraintTemplate.
 	ErrAddingTemplate = errors.New("adding template")
 	// ErrAddingConstraint indicates a problem instantiating a Suite's Constraint.
@@ -31,6 +33,8 @@ var (
 	ErrAddingGVKManifest = errors.New("adding gvkmanifest")
 	// ErrAddingConfig indicates a problem instantiating a user-indicated Config.
 	ErrAddingConfig = errors.New("adding config")
+	// ErrAddingProvider indicates a problem instantiating a user-indicated Provider.
+	ErrAddingProvider = errors.New("adding provider")
 	// ErrInvalidSuite indicates a Suite does not define the required fields.
 	ErrInvalidSuite = errors.New("invalid Suite")
 	// ErrCreatingClient indicates an error instantiating the Client which compiles
