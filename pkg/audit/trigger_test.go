@@ -510,12 +510,16 @@ func TestAuditTriggerRetryBackoff(t *testing.T) {
 			return attempts.Load() == want && timerClock.HasWaiters()
 		}, 5*time.Second, time.Millisecond)
 	}
+	requireNoAttempt := func(want int32) {
+		t.Helper()
+		require.Never(t, func() bool { return attempts.Load() != want }, 20*time.Millisecond, time.Millisecond)
+	}
 	am.auditTriggerWake <- struct{}{}
 	var count int32 = 1
 	waitForRetry(count)
 	for _, delay := range []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second} {
 		timerClock.Step(delay - time.Millisecond)
-		require.Never(t, func() bool { return attempts.Load() != count }, 20*time.Millisecond, time.Millisecond)
+		requireNoAttempt(count)
 		advance := delay/10 + time.Millisecond
 		if delay == 30*time.Second {
 			advance = time.Millisecond
@@ -533,13 +537,13 @@ func TestAuditTriggerRetryBackoff(t *testing.T) {
 	}, 5*time.Second, time.Millisecond)
 	reject.Store(true)
 	timerClock.Step(time.Hour)
-	require.Never(t, func() bool { return attempts.Load() != count }, 20*time.Millisecond, time.Millisecond)
+	requireNoAttempt(count)
 
 	am.auditTriggerWake <- struct{}{}
 	count++
 	waitForRetry(count)
 	timerClock.Step(time.Second - time.Millisecond)
-	require.Never(t, func() bool { return attempts.Load() != count }, 20*time.Millisecond, time.Millisecond)
+	requireNoAttempt(count)
 	timerClock.Step(102 * time.Millisecond)
 	count++
 	waitForRetry(count)

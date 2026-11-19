@@ -858,6 +858,45 @@ func TestAuditFromCachePropagatesFailures(t *testing.T) {
 	}
 }
 
+func TestAuditFromCacheBoundsErrors(t *testing.T) {
+	pod := fakes.Pod(fakes.WithNamespace("test-namespace"))
+	for _, largeListError := range []bool{false, true} {
+		t.Run(strconv.FormatBool(largeListError), func(t *testing.T) {
+			objects := make([]client.Object, maxAuditErrors+100)
+			for i := range objects {
+				copy := pod.DeepCopy()
+				copy.SetName(fmt.Sprintf("pod-%d", i))
+				objects[i] = copy
+			}
+			reader := fake.NewClientBuilder().WithObjects(objects...).WithInterceptorFuncs(interceptor.Funcs{
+				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					if largeListError {
+						return errors.New(strings.Repeat("large backend error ", msgSize))
+					}
+					return c.List(ctx, list, opts...)
+				},
+			}).Build()
+			am := newReviewObjectsTestManager(t, "test-namespace")
+			am.processExcluder = process.New()
+			am.auditCache = NewAuditCacheLister(reader, &fakeWatchIterator{gvksToList: []schema.GroupVersionKind{pod.GroupVersionKind()}})
+			am.opa = auditClientWithoutAuditEnforcementPoint(t)
+			results, errs := am.auditFromCache(context.Background())
+			require.Empty(t, results)
+			require.NotEmpty(t, errs)
+			for _, err := range errs {
+				require.LessOrEqual(t, len(err.Error()), msgSize)
+			}
+			if largeListError {
+				require.Len(t, errs, 1)
+				require.Contains(t, errs[0].Error(), "...")
+			} else {
+				require.Len(t, errs, maxAuditErrors+1)
+				require.Contains(t, errs[len(errs)-1].Error(), "omitted")
+			}
+		})
+	}
+}
+
 func auditClientWithoutAuditEnforcementPoint(t *testing.T) *constraintclient.Client {
 	t.Helper()
 	driver, err := rego.New()
@@ -1646,12 +1685,44 @@ func TestAuditReportingPreservesOperationErrors(t *testing.T) {
 			am := &Manager{client: wrapped, log: logr.Discard()}
 			err := am.writeAuditResults(ctx, []schema.GroupVersionKind{constraint.GroupVersionKind()}, nil, time.Now().UTC().Format(time.RFC3339Nano), nil)
 			require.ErrorIs(t, err, context.Canceled)
-			require.ErrorIs(t, err, cause)
+			require.ErrorContains(t, err, cause.Error())
 			require.ErrorContains(t, err, operation+" constraint")
 			require.ErrorContains(t, err, "TestConstraint")
 			require.ErrorContains(t, err, constraint.GetName())
 		})
 	}
+}
+
+func TestAuditReportingBoundsErrors(t *testing.T) {
+	constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+		"kind":       "TestConstraint",
+	}}
+	objects := make([]client.Object, maxAuditErrors+100)
+	for i := range objects {
+		copy := constraint.DeepCopy()
+		copy.SetName(fmt.Sprintf("constraint-%d", i))
+		objects[i] = copy
+	}
+	base := fake.NewClientBuilder().WithObjects(objects...).Build()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reads := 0
+	wrapped := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+			reads++
+			if reads == len(objects) {
+				cancel()
+			}
+			return errors.New(strings.Repeat("backend unavailable ", msgSize))
+		},
+	})
+	am := &Manager{client: wrapped, log: logr.Discard()}
+	err := am.writeAuditResults(ctx, []schema.GroupVersionKind{constraint.GroupVersionKind()}, nil, time.Now().UTC().Format(time.RFC3339Nano), nil)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, maxAuditErrors, strings.Count(err.Error(), "getting constraint"))
+	require.ErrorContains(t, err, "additional constraint reporting errors omitted")
+	require.LessOrEqual(t, len(err.Error()), (maxAuditErrors+2)*(msgSize+1))
 }
 
 func TestAuditReportingDropsRecoveredErrors(t *testing.T) {

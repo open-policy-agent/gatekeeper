@@ -47,11 +47,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: AuditTriggerSpec requests an immediate audit.
+            description: spec requests an audit by changing its nonce.
             properties:
               auditNonce:
                 description: |-
-                  AuditNonce requests an audit as soon as possible when changed. It is a
+                  auditNonce requests an audit as soon as possible when changed. It is a
                   change token, not an execution ID; use metadata.generation to track completion.
                 maxLength: 128
                 minLength: 1
@@ -60,38 +60,42 @@ spec:
             - auditNonce
             type: object
           status:
-            description: AuditTriggerStatus describes the state of the requested audit.
+            description: status reports generation watermarks and the most recently
+              reported execution.
             properties:
               acknowledgedGeneration:
-                description: AcknowledgedGeneration is the highest generation accepted
+                description: acknowledgedGeneration is the highest generation accepted
                   by Gatekeeper.
                 format: int64
                 minimum: 0
                 type: integer
               failedGeneration:
-                description: FailedGeneration is the highest generation covered by
+                description: failedGeneration is the highest generation covered by
                   a failed audit.
                 format: int64
                 minimum: 0
                 type: integer
               lastRun:
-                description: |-
-                  AuditRunStatus describes the most recently reported execution, regardless of its trigger.
-                  Audit expects a singleton audit pod; during pod overlap, lastRun may be overwritten out of order.
-                  Generation watermarks (auditTriggerStatus) remain monotonic and authoritative for request completion.
-                  Clients must use those watermarks, not lastRun, to determine whether a request is satisfied
+                description: lastRun describes the most recently reported execution
+                  and is not authoritative for request completion.
                 properties:
                   completedAt:
+                    description: completedAt is the time the audit run finished, if
+                      a terminal result was reported.
                     format: date-time
                     type: string
                   coveredGeneration:
-                    description: CoveredGeneration is frozen when the run starts.
+                    description: coveredGeneration is frozen when the run starts.
                       Later requests need another run.
                     format: int64
                     type: integer
                   message:
+                    description: message is a human-readable explanation of the reported
+                      state.
                     type: string
                   phase:
+                    description: phase is the reported execution state; Running does
+                      not guarantee that the executing pod is still alive.
                     enum:
                     - Running
                     - Succeeded
@@ -99,8 +103,11 @@ spec:
                     - Unknown
                     type: string
                   reason:
+                    description: reason is a machine-readable explanation of the reported
+                      state.
                     type: string
                   startedAt:
+                    description: startedAt is the time the audit run started.
                     format: date-time
                     type: string
                 required:
@@ -112,7 +119,7 @@ spec:
                 type: object
               successfulGeneration:
                 description: |-
-                  SuccessfulGeneration is the highest generation covered by a successful audit.
+                  successfulGeneration is the highest generation covered by a successful audit.
                   Check this before FailedGeneration; a later failure does not invalidate success.
                 format: int64
                 minimum: 0

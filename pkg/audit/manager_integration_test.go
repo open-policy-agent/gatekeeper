@@ -86,19 +86,26 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 				}
 			}
 			var scans, triggerCalls atomic.Int32
+			var fault atomic.Pointer[auditHTTPFault]
+			if tt.enabled && tt.interval > 0 {
+				fault.Store(&auditHTTPFault{
+					match: func(req *http.Request) bool {
+						return strings.HasSuffix(req.URL.Path, "/customresourcedefinitions/"+crdName)
+					},
+					code: http.StatusForbidden,
+				})
+			}
 			managerConfig := rest.CopyConfig(cfg)
 			managerConfig.Wrap(func(rt http.RoundTripper) http.RoundTripper {
+				faultTransport := &auditFaultTransport{RoundTripper: rt, fault: &fault}
 				return auditRoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 					if strings.HasPrefix(req.URL.Path, "/apis/audit.gatekeeper.sh/") {
 						triggerCalls.Add(1)
 					}
 					if strings.HasSuffix(req.URL.Path, "/customresourcedefinitions/"+crdName) && req.Method == http.MethodGet {
 						scans.Add(1)
-						if tt.enabled && tt.interval > 0 {
-							return nil, io.ErrUnexpectedEOF
-						}
 					}
-					return rt.RoundTrip(req)
+					return faultTransport.RoundTrip(req)
 				})
 			})
 			skipNameValidation := true

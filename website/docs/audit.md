@@ -63,6 +63,8 @@ successful generation. A missing required ConstraintTemplate CRD also fails the 
 An absent constraint API is treated as an empty audit.
 Timing metrics and audit-finished logs/export messages mark the end of an attempt, including failed
 attempts; use the trigger's generation watermarks to determine success.
+Error collection retains at most ten diagnostic messages of up to 256 bytes each, plus an omission
+marker. Complete per-resource errors are logged rather than retained in the audit result.
 
 Multiple requests observed before an audit starts are coalesced into that audit. A request received
 during an audit requires a subsequent run; it is not silently skipped. A periodic audit can satisfy
