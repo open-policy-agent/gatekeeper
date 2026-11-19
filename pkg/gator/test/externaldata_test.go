@@ -58,6 +58,7 @@ func TestTestExternalData(t *testing.T) {
 		value       string
 		itemError   string
 		systemError string
+		status      int
 	}
 	var requests atomic.Int32
 	var result atomic.Value
@@ -85,6 +86,12 @@ func TestTestExternalData(t *testing.T) {
 		if !ok {
 			t.Error("unexpected Provider response type")
 			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if providerResponse.status != 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(providerResponse.status)
+			_, _ = w.Write([]byte(`{"error":"upstream unavailable"}`))
 			return
 		}
 		if err := json.NewEncoder(w).Encode(externaldata.ProviderResponse{
@@ -128,6 +135,8 @@ func TestTestExternalData(t *testing.T) {
 	}{
 		{response: providerResult{systemError: "provider unavailable"}, wantMsg: "provider failure"},
 		{response: providerResult{itemError: "item unavailable"}, wantMsg: "provider item error"},
+		// A JSON error body leaves system_error empty, so only status_code reports the failure.
+		{response: providerResult{status: http.StatusServiceUnavailable}, wantMsg: "provider failure"},
 	} {
 		result.Store(tc.response)
 		responses, err = Test(objs, gator.WithExternalDataProviders(provider))

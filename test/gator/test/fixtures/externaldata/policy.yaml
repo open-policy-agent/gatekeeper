@@ -22,6 +22,13 @@ spec:
       violation[{"msg": msg}] {
         input.review.object.kind == "Namespace"
         response := external_data({"provider": "test-provider", "keys": [input.review.object.metadata.name]})
+        response.status_code >= 300
+        msg := "provider failure"
+      }
+
+      violation[{"msg": msg}] {
+        input.review.object.kind == "Namespace"
+        response := external_data({"provider": "test-provider", "keys": [input.review.object.metadata.name]})
         count(response.errors) > 0
         msg := "provider item error"
       }
