@@ -74,6 +74,7 @@ rules:
   - patch
   - update
   - watch
+{{- if and .Values.enableAuditTrigger (not .Values.disableAudit) }}
 - apiGroups:
   - audit.gatekeeper.sh
   resources:
@@ -82,6 +83,8 @@ rules:
   - get
   - list
   - watch
+{{- end }}
+{{- if and .Values.enableAuditTrigger (not .Values.disableAudit) }}
 - apiGroups:
   - audit.gatekeeper.sh
   resources:
@@ -90,6 +93,7 @@ rules:
   - get
   - patch
   - update
+{{- end }}
 - apiGroups:
   - config.gatekeeper.sh
   resources:

@@ -1,6 +1,7 @@
 replicas: 3
 revisionHistoryLimit: 10
 auditInterval: 60
+enableAuditTrigger: false
 metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
