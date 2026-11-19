@@ -14,7 +14,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/onsi/gomega v1.44.0
-	github.com/open-policy-agent/cert-controller v0.16.1-0.20260608222807-1c492bc2d223
+	github.com/open-policy-agent/cert-controller v0.16.1-0.20261117234107-32045c478dc2
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20261117233605-c3feac3bb7a6
 	github.com/open-policy-agent/opa v1.22.4
 	github.com/pkg/errors v0.9.1
@@ -132,7 +132,7 @@ require (
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
