@@ -93,7 +93,7 @@ func (b *GVKAgreggator) Upsert(k Key, gvks []schema.GroupVersionKind) {
 	}
 }
 
-// List returnes the gvk set for a given Key.
+// List returns the gvk set for a given Key.
 func (b *GVKAgreggator) List(k Key) []schema.GroupVersionKind {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

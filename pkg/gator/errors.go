@@ -67,7 +67,7 @@ var (
 	ErrMissingK8sAdmissionRequest = errors.New("missing an AdmissionRequest object")
 	// ErrReviewObject occurs when a test attempts to pass in an AdmissionRequest with no
 	// object or oldObject for the underlying framework to review.
-	// This mimicks the k8s api server behvaior.
+	// This mimics the k8s api server behavior.
 	ErrNoObjectForReview = errors.New("no object or oldObject found to review")
 	// ErrInvalidYAML indicates that a .yaml/.yml file was not parseable.
 	ErrInvalidYAML = errors.New("invalid yaml")
