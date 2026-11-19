@@ -163,13 +163,10 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 	} else {
 		r.pending.status.FailedGeneration = max(r.pending.status.FailedGeneration, generation)
 	}
-	if err := r.flushCompletion(ctx); err != nil {
-		return errors.Join(auditErr, err)
-	}
 	if onDemand && auditErr == nil && r.resetTicker != nil {
 		r.resetTicker()
 	}
-	return auditErr
+	return errors.Join(auditErr, r.flushCompletion(ctx))
 }
 
 func (r *auditTriggerRunner) flushCompletion(ctx context.Context) error {

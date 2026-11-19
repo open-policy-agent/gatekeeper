@@ -7,10 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	auditv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/audit/v1alpha1"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -82,9 +84,6 @@ func TestAuditTriggerRunCoalescesAndPreservesCompletion(t *testing.T) {
 		return nil
 	})
 	runner.resetTicker = func() {
-		status := getAuditTrigger(t, c).Status
-		require.Equal(t, "Succeeded", status.LastRun.Phase)
-		require.Equal(t, status.LastRun.CoveredGeneration, status.SuccessfulGeneration)
 		resets++
 	}
 	require.NoError(t, runner.run(context.Background(), true))
@@ -217,6 +216,66 @@ func TestAuditTriggerRetriesCompletionWrite(t *testing.T) {
 	require.False(t, fail)
 	require.Equal(t, 1, runs)
 	require.EqualValues(t, 7, getAuditTrigger(t, c).Status.SuccessfulGeneration)
+}
+
+func TestAuditTriggerResetsScheduleDespiteCompletionWriteFailure(t *testing.T) {
+	for _, onDemand := range []bool{false, true} {
+		t.Run(map[bool]string{true: "on-demand", false: "scheduled"}[onDemand], func(t *testing.T) {
+			c := newAuditTriggerClient(t, newAuditTrigger(7))
+			reject := true
+			wrapped := interceptor.NewClient(c, interceptor.Funcs{
+				SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+					if trigger, ok := obj.(*auditv1alpha1.AuditTrigger); ok && trigger.Status.SuccessfulGeneration == 7 && reject {
+						return apierrors.NewForbidden(schema.GroupResource{Resource: "audittriggers/status"}, obj.GetName(), errors.New("denied"))
+					}
+					return c.SubResource(name).Update(ctx, obj, opts...)
+				},
+			})
+			runs, resets := 0, 0
+			runner := newAuditTriggerRunner(wrapped, func(context.Context) error {
+				runs++
+				return nil
+			})
+			runner.resetTicker = func() { resets++ }
+			wantResets := 0
+			if onDemand {
+				wantResets = 1
+			}
+			require.Error(t, runner.run(context.Background(), onDemand))
+			require.Equal(t, wantResets, resets)
+			require.NotNil(t, runner.pending)
+			require.Zero(t, getAuditTrigger(t, c).Status.SuccessfulGeneration)
+			require.Error(t, runner.run(context.Background(), true))
+			require.Equal(t, 1, runs)
+			require.Equal(t, wantResets, resets)
+			reject = false
+			require.NoError(t, runner.run(context.Background(), true))
+			require.NoError(t, runner.run(context.Background(), true))
+			require.Equal(t, 1, runs)
+			require.Equal(t, wantResets, resets)
+			require.EqualValues(t, 7, getAuditTrigger(t, c).Status.SuccessfulGeneration)
+		})
+	}
+}
+
+func TestAuditTriggerSkippedPublicationFailsRequest(t *testing.T) {
+	c := newAuditTriggerClient(t, newAuditTrigger(7))
+	constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+		"kind":       "TestConstraint",
+		"metadata":   map[string]interface{}{"name": "example"},
+		"status":     map[string]interface{}{"auditTimestamp": "2026-11-04T00:00:00.002Z"},
+	}}
+	loop := &updateConstraintLoop{log: logr.Discard()}
+	runner := newAuditTriggerRunner(c, func(ctx context.Context) error {
+		return loop.updateConstraintStatus(ctx, constraint, newLimitQueue(0), "2026-11-04T00:00:00.001Z", 0)
+	})
+	require.ErrorContains(t, runner.run(context.Background(), true), "newer than this audit")
+	status := getAuditTrigger(t, c).Status
+	require.Zero(t, status.SuccessfulGeneration)
+	require.EqualValues(t, 7, status.FailedGeneration)
+	require.Equal(t, "Failed", status.LastRun.Phase)
+	require.Equal(t, map[string]interface{}{"auditTimestamp": "2026-11-04T00:00:00.002Z"}, constraint.Object["status"])
 }
 
 func TestAuditTriggerPeriodicRunWithoutSingleton(t *testing.T) {

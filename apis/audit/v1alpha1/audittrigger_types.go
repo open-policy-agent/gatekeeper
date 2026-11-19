@@ -29,7 +29,9 @@ type AuditTriggerStatus struct {
 }
 
 // AuditRunStatus describes the most recently reported execution, regardless of its trigger.
-// Audit assumes a single replica; overlapping pods may overwrite this record.
+// Audit expects a singleton audit pod; during pod overlap, lastRun may be overwritten out of order.
+// Generation watermarks (auditTriggerStatus) remain monotonic and authoritative for request completion.
+// Clients must use those watermarks, not lastRun, to determine whether a request is satisfied
 type AuditRunStatus struct {
 	// CoveredGeneration is frozen when the run starts. Later requests need another run.
 	CoveredGeneration int64        `json:"coveredGeneration"`

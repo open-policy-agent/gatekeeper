@@ -1565,8 +1565,19 @@ func TestAuditResultsWaitForStatusWrites(t *testing.T) {
 		t.Run(strconv.FormatBool(cancelWrite), func(t *testing.T) {
 			entered := make(chan struct{})
 			release := make(chan struct{})
+			var listDeadline time.Time
 			wrapped := interceptor.NewClient(base, interceptor.Funcs{
+				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					var ok bool
+					listDeadline, ok = ctx.Deadline()
+					require.True(t, ok)
+					time.Sleep(20 * time.Millisecond)
+					return c.List(ctx, list, opts...)
+				},
 				SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+					deadline, ok := ctx.Deadline()
+					require.True(t, ok)
+					require.True(t, deadline.After(listDeadline), "each API operation needs a fresh reporting budget")
 					close(entered)
 					select {
 					case <-ctx.Done():
@@ -1630,7 +1641,7 @@ func TestAuditStatusWritesPreserveResultsAndRejectOlderRuns(t *testing.T) {
 	loop := &updateConstraintLoop{client: wrapped, log: logr.Discard()}
 	results := newLimitQueue(1)
 	results.Push(&StatusViolation{Name: "noncompliant"})
-	require.NoError(t, loop.updateConstraintStatus(context.Background(), constraint, results, "2026-11-04T00:00:00.001Z", 1))
+	require.ErrorContains(t, loop.updateConstraintStatus(context.Background(), constraint, results, "2026-11-04T00:00:00.001Z", 1), "newer than this audit")
 	require.Zero(t, writes)
 	require.Error(t, loop.updateConstraintStatus(context.Background(), constraint, results, "2026-11-04T00:00:00.003Z", 1))
 	require.NoError(t, loop.updateConstraintStatus(context.Background(), constraint, results, "2026-11-04T00:00:00.003Z", 1))

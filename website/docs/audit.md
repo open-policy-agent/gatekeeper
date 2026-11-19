@@ -45,9 +45,13 @@ For the generation `G` returned by your write, evaluate status in this order:
 Missing generation watermarks mean zero. Watermarks never decrease within the same object's lifetime.
 A later failure does not invalidate an earlier success. `status.lastRun` describes the most recently
 reported execution, regardless of what triggered it; clients use the generation watermarks to track requests.
-Run a single audit replica. Temporary overlap during rollout or restart can overwrite this diagnostic
-record or constraint results out of order. Cross-pod execution ordering is not guaranteed in alpha;
-there is no execution-ID fencing or pod substatus.
+
+Run a single audit replica. `lastRun` is intended as a best-effort diagnostic rather than a contract the
+client can rely on: during rollout or restart overlap, `lastRun` may be overwritten out of order. Generation watermarks are guaranteed monotonic,
+hence the intended client behavior being to use those instead.
+
+Constraint-status writes reject audit timestamps older than the stored timestamp, and rejected publication fails the audit rather than reporting success. This check does not guarantee execution ordering across pods with different clocks.
+
 Success includes completion of constraint-status writes, but does not mean that no violations were
 found or that an external consumer uploaded the results.
 
@@ -66,7 +70,8 @@ an already-observed request. Following a restart, requests without durable compl
 so execution is at-least-once, not exactly-once. Starting an audit does not itself guarantee that
 all policy and resource caches have caught up.
 
-An on-demand audit resets the periodic audit schedule only after successful completion, so another audit will still start within the configured
+A successful on-demand scan resets the periodic audit schedule even if its completion status
+cannot yet be persisted, so another audit will still start within the configured
 `--audit-interval`. Setting `--audit-interval=0` disables periodic audits; with the trigger feature
 enabled, audits can still be requested with an `AuditTrigger`. With both the feature disabled and
 the interval set to zero, auditing is fully disabled.

@@ -1197,7 +1197,7 @@ func (am *Manager) stopAuditResultsUpdateLoop() {
 func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) error {
 	am.stopAuditResultsUpdateLoop()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	am.ucloop = &updateConstraintLoop{
 		client:  am.client,
@@ -1225,6 +1225,8 @@ func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, 
 }
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults *LimitQueue, timestamp string, totalViolations int64) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -1235,7 +1237,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	previousTime, previousErr := time.Parse(time.RFC3339Nano, previous)
 	runTime, runErr := time.Parse(time.RFC3339Nano, timestamp)
 	if previousErr == nil && runErr == nil && previousTime.After(runTime) {
-		return nil
+		return fmt.Errorf("constraint %s already has audit results from %s, newer than this audit's %s", instance.GetName(), previous, timestamp)
 	}
 	constraintName := instance.GetName()
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
@@ -1338,7 +1340,9 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		ucloop.log.Info("constraint", "resource kind", constraintGvk.Kind)
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(constraintGvk)
-		err := ucloop.client.List(ctx, instanceList)
+		listCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		err := ucloop.client.List(listCtx, instanceList)
+		cancel()
 		if err != nil {
 			ucloop.log.Error(err, "error while listing constraints", "kind", constraintGvk.Kind)
 			ucloop.err = err
@@ -1373,7 +1377,9 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					Namespace: key.Namespace,
 				}
 				// get the latest constraint
-				err := ucloop.client.Get(ctx, namespacedName, constraint)
+				getCtx, cancel := context.WithTimeout(ctx, time.Minute)
+				err := ucloop.client.Get(getCtx, namespacedName, constraint)
+				cancel()
 				if err != nil {
 					if apierrors.IsNotFound(err) {
 						ucloop.log.Info("could not find constraint", "name", key.Name, "namespace", key.Namespace)
