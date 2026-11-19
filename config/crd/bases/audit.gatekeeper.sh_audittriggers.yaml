@@ -75,8 +75,9 @@ spec:
                 minimum: 0
                 type: integer
               lastRun:
-                description: AuditRunStatus describes the latest started execution,
-                  regardless of its trigger.
+                description: |-
+                  AuditRunStatus describes the most recently reported execution, regardless of its trigger.
+                  Audit assumes a single replica; overlapping pods may overwrite this record.
                 properties:
                   completedAt:
                     format: date-time
@@ -86,11 +87,6 @@ spec:
                       Later requests need another run.
                     format: int64
                     type: integer
-                  id:
-                    description: |-
-                      ID identifies this execution for fencing status writes across audit pods.
-                      Clients track requests using generation watermarks, not this ID.
-                    type: string
                   message:
                     type: string
                   phase:

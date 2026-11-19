@@ -21,6 +21,8 @@ var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 // use exactly two spaces to be sure we are capturing metadata.name.
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
+var auditTriggerRBACRegex = regexp.MustCompile(`(?m)^- apiGroups:\n  - audit\.gatekeeper\.sh\n(?:  .*\n)*`)
+
 const (
 	DeploymentKind     = "Deployment"
 	ServiceAccountKind = "ServiceAccount"
@@ -178,6 +180,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-manager-role" && kind == "ClusterRole" {
+				obj = auditTriggerRBACRegex.ReplaceAllString(obj, "{{- if and .Values.enableAuditTrigger (not .Values.disableAudit) }}\n${0}{{- end }}\n")
 				obj = strings.Replace(obj, "- gatekeeper-validating-webhook-configuration\n", "- {{ .Values.validatingWebhookName }}\n  {{- range $additionalValidatingWebhookConfig := .Values.additionalValidatingWebhookConfigsToRotateCerts }}\n  - {{ $additionalValidatingWebhookConfig }}\n  {{- end }}\n", 1)
 				obj = strings.Replace(obj, "- gatekeeper-mutating-webhook-configuration\n", "- {{ .Values.mutatingWebhookName }}\n  {{- range $additionalMutatingWebhookConfig := .Values.additionalMutatingWebhookConfigsToRotateCerts }}\n  - {{ $additionalMutatingWebhookConfig }}\n  {{- end }}\n", 1)
 			}

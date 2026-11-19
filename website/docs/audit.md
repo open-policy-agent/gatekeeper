@@ -7,7 +7,18 @@ Audit performs periodic evaluations of existing resources against constraints, d
 
 ## Triggering an Audit
 
-An audit can be requested before the next configured audit interval by creating an `AuditTrigger`.
+On-demand audit is an alpha feature, disabled by default. Enable it on the audit process with
+`--enable-audit-trigger=true` (Helm: `enableAuditTrigger: true`) and install the `AuditTrigger` CRD
+and its RBAC permissions. The chart and standard manifests include the CRD; its presence alone
+does not enable the feature. Static manifests include trigger permissions; Helm grants the explicit
+trigger permissions only when enabled.
+
+With the feature disabled, Gatekeeper does not register the trigger controller or read or write
+trigger status, and periodic audits do not depend on the trigger CRD. If the CRD is installed,
+requests can still be created but are not acknowledged or processed while disabled.
+Requests left pending are processed when the feature is enabled.
+
+Once enabled, an audit can be requested before the next configured audit interval by creating an `AuditTrigger`.
 Change `spec.auditNonce` to a fresh random UUID to request an audit as soon as possible.
 The nonce is only a change token: it is not an audit ID or a scheduling instruction.
 
@@ -32,9 +43,11 @@ For the generation `G` returned by your write, evaluate status in this order:
 4. Otherwise, wait. `status.acknowledgedGeneration >= G` means Gatekeeper accepted the request.
 
 Missing generation watermarks mean zero. Watermarks never decrease within the same object's lifetime.
-A later failure does not invalidate an earlier success. `status.lastRun` describes the latest started
-execution, regardless of what triggered it. Its server-generated `id` fences overlapping executions;
-clients use the generation watermarks, not this ID, to track requests.
+A later failure does not invalidate an earlier success. `status.lastRun` describes the most recently
+reported execution, regardless of what triggered it; clients use the generation watermarks to track requests.
+Run a single audit replica. Temporary overlap during rollout or restart can overwrite this diagnostic
+record or constraint results out of order. Cross-pod execution ordering is not guaranteed in alpha;
+there is no execution-ID fencing or pod substatus.
 Success includes completion of constraint-status writes, but does not mean that no violations were
 found or that an external consumer uploaded the results.
 
@@ -54,12 +67,14 @@ so execution is at-least-once, not exactly-once. Starting an audit does not itse
 all policy and resource caches have caught up.
 
 An on-demand audit resets the periodic audit schedule only after successful completion, so another audit will still start within the configured
-`--audit-interval`. Setting `--audit-interval=0` disables periodic audits, but audits can still be
-requested with an `AuditTrigger`.
+`--audit-interval`. Setting `--audit-interval=0` disables periodic audits; with the trigger feature
+enabled, audits can still be requested with an `AuditTrigger`. With both the feature disabled and
+the interval set to zero, auditing is fully disabled.
 
 Trigger-status writes use bounded retries. If a completion cannot be persisted, Gatekeeper retains
 the highest successful and failed generations in memory and retries without blocking periodic scans.
 A restart before persistence may rerun the request.
+Failed periodic audits wait for the next configured interval; they do not schedule fast retries.
 
 ## Reading Audit Results
 

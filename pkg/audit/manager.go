@@ -62,7 +62,8 @@ const (
 )
 
 var (
-	auditInterval                = flag.Int64("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
+	auditInterval                = flag.Int64("audit-interval", defaultAuditInterval, "interval to run periodic audit in seconds. defaulted to 60 secs if unspecified, 0 to disable periodic audits; on-demand audits require --enable-audit-trigger")
+	enableAuditTrigger           = flag.Bool("enable-audit-trigger", false, "(alpha) enable on-demand audits and AuditTrigger status reporting")
 	constraintViolationsLimit    = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
 	auditChunkSize               = flag.Int("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
 	auditFromCache               = flag.Bool("audit-from-cache", false, "audit synced resources from internal cache, bypassing direct queries to Kubernetes API server")
@@ -965,20 +966,33 @@ func (am *Manager) readUnstructuredList(jsonBytes []byte) ([]unstructured.Unstru
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
-	runner := &auditTriggerRunner{
-		reader: am.mgr.GetAPIReader(),
-		client: am.mgr.GetClient(),
-		audit:  am.audit,
-		now:    time.Now,
+	var runner *auditTriggerRunner
+	if *enableAuditTrigger {
+		runner = &auditTriggerRunner{
+			reader: am.mgr.GetAPIReader(),
+			client: am.mgr.GetClient(),
+			audit:  am.audit,
+			now:    time.Now,
+		}
 	}
 	ticker, tickerC := newAuditTicker(time.Duration(*auditInterval) * time.Second)
 	if ticker != nil {
 		defer ticker.Stop()
-		runner.resetTicker = func() {
-			ticker.Reset(time.Duration(*auditInterval) * time.Second)
+		if runner != nil {
+			runner.resetTicker = func() {
+				ticker.Reset(time.Duration(*auditInterval) * time.Second)
+			}
 		}
-	} else {
+	} else if runner != nil {
 		log.Info("periodic auditing is disabled; audits can still be triggered with AuditTrigger")
+	}
+	am.runAuditLoop(ctx, tickerC, runner)
+}
+
+func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, runner *auditTriggerRunner) {
+	var triggerWake <-chan struct{}
+	if runner != nil {
+		triggerWake = am.auditTriggerWake
 	}
 	var retryTimer *time.Timer
 	var retryC <-chan time.Time
@@ -1002,10 +1016,14 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 			close(am.stopper)
 			return
 		case <-tickerC:
-			err := runner.run(ctx, false)
+			var err error
+			if runner == nil {
+				err = am.audit(ctx)
+			} else {
+				err = runner.run(ctx, false)
+			}
 			if err != nil {
 				log.Error(err, "audit manager audit() failed")
-				scheduleRetry()
 			}
 		case <-retryC:
 			retryC = nil
@@ -1013,7 +1031,7 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 			case am.auditTriggerWake <- struct{}{}:
 			default:
 			}
-		case <-am.auditTriggerWake:
+		case <-triggerWake:
 			err := runner.run(ctx, true)
 			if err != nil {
 				log.Error(err, "on-demand audit failed")

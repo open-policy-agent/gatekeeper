@@ -28,11 +28,9 @@ type AuditTriggerStatus struct {
 	LastRun          *AuditRunStatus `json:"lastRun,omitempty"`
 }
 
-// AuditRunStatus describes the latest started execution, regardless of its trigger.
+// AuditRunStatus describes the most recently reported execution, regardless of its trigger.
+// Audit assumes a single replica; overlapping pods may overwrite this record.
 type AuditRunStatus struct {
-	// ID identifies this execution for fencing status writes across audit pods.
-	// Clients track requests using generation watermarks, not this ID.
-	ID string `json:"id,omitempty"`
 	// CoveredGeneration is frozen when the run starts. Later requests need another run.
 	CoveredGeneration int64        `json:"coveredGeneration"`
 	StartedAt         metav1.Time  `json:"startedAt"`

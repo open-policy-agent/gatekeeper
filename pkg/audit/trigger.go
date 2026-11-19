@@ -9,7 +9,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -127,7 +126,6 @@ func (r *auditTriggerRunner) run(ctx context.Context, onDemand bool) error {
 	}
 
 	run := auditv1alpha1.AuditRunStatus{
-		ID:                string(uuid.NewUUID()),
 		CoveredGeneration: generation,
 		StartedAt:         metav1.NewTime(r.now()),
 		Phase:             "Running",
@@ -182,9 +180,7 @@ func (r *auditTriggerRunner) flushCompletion(ctx context.Context) error {
 	err := r.updateStatus(ctx, r.pending.uid, func(status *auditv1alpha1.AuditTriggerStatus) {
 		status.SuccessfulGeneration = max(status.SuccessfulGeneration, pending.SuccessfulGeneration)
 		status.FailedGeneration = max(status.FailedGeneration, pending.FailedGeneration)
-		if status.LastRun != nil && status.LastRun.ID == pending.LastRun.ID {
-			status.LastRun = pending.LastRun
-		}
+		status.LastRun = pending.LastRun
 	})
 	if err == nil {
 		r.pending = nil

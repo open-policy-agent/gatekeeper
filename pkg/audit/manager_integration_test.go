@@ -35,18 +35,148 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
+func TestAuditTriggerFeatureGate(t *testing.T) {
+	oldInterval, oldTrigger := *auditInterval, *enableAuditTrigger
+	restore := setAuditGlobalsForReviewTest(t)
+	t.Cleanup(func() {
+		restore()
+		*auditInterval, *enableAuditTrigger = oldInterval, oldTrigger
+	})
+	testScheme := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(testScheme))
+	require.NoError(t, apis.AddToScheme(testScheme))
+	require.NoError(t, apiextensionsv1.AddToScheme(testScheme))
+	crdDir := filepath.Join("..", "..", "config", "crd", "bases")
+	testEnv := &envtest.Environment{
+		CRDDirectoryPaths:     []string{filepath.Join(crdDir, "constrainttemplate-customresourcedefinition.yaml")},
+		ErrorIfCRDPathMissing: true,
+	}
+	cfg, err := testEnv.Start()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, testEnv.Stop()) })
+	apiClient, err := client.New(cfg, client.Options{Scheme: testScheme})
+	require.NoError(t, err)
+	for _, tt := range []struct {
+		name     string
+		enabled  bool
+		interval int64
+	}{
+		{name: "disabled with zero interval"},
+		{name: "disabled periodic audit without trigger CRD", interval: 1},
+		{name: "enabled on-demand only", enabled: true},
+		{name: "enabled periodic audit reports failure", enabled: true, interval: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			*auditInterval, *enableAuditTrigger = tt.interval, tt.enabled
+			ctx := context.Background()
+			trigger := &auditv1alpha1.AuditTrigger{
+				ObjectMeta: metav1.ObjectMeta{Name: auditv1alpha1.AuditTriggerName},
+				Spec:       auditv1alpha1.AuditTriggerSpec{AuditNonce: "gate-test"},
+			}
+			if tt.enabled {
+				_, err := envtest.InstallCRDs(cfg, envtest.CRDInstallOptions{
+					Paths: []string{filepath.Join(crdDir, "audit.gatekeeper.sh_audittriggers.yaml")},
+				})
+				require.NoError(t, err)
+				require.NoError(t, apiClient.Create(ctx, trigger))
+				t.Cleanup(func() { require.NoError(t, apiClient.Delete(ctx, trigger)) })
+				if tt.interval > 0 {
+					trigger.Status.SuccessfulGeneration = trigger.Generation
+					require.NoError(t, apiClient.Status().Update(ctx, trigger))
+				}
+			}
+			var scans, triggerCalls atomic.Int32
+			managerConfig := rest.CopyConfig(cfg)
+			managerConfig.Wrap(func(rt http.RoundTripper) http.RoundTripper {
+				return auditRoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+					if strings.HasPrefix(req.URL.Path, "/apis/audit.gatekeeper.sh/") {
+						triggerCalls.Add(1)
+					}
+					if strings.HasSuffix(req.URL.Path, "/customresourcedefinitions/"+crdName) && req.Method == http.MethodGet {
+						scans.Add(1)
+						if tt.enabled && tt.interval > 0 {
+							return nil, io.ErrUnexpectedEOF
+						}
+					}
+					return rt.RoundTrip(req)
+				})
+			})
+			skipNameValidation := true
+			realManager, err := manager.New(managerConfig, manager.Options{
+				Scheme:  testScheme,
+				Metrics: metricsserver.Options{BindAddress: "0"},
+				Controller: controllerconfig.Controller{
+					SkipNameValidation: &skipNameValidation,
+				},
+			})
+			require.NoError(t, err)
+			mgr := &auditRecordingManager{Manager: realManager}
+			require.NoError(t, AddToManager(mgr, &Dependencies{}))
+			if !tt.enabled && tt.interval == 0 {
+				require.Nil(t, mgr.audit)
+				require.Zero(t, mgr.added)
+				return
+			}
+			wantAdded := 1
+			if tt.enabled {
+				wantAdded++
+			}
+			require.Equal(t, wantAdded, mgr.added)
+			runCtx, cancel := context.WithCancel(ctx)
+			done := make(chan error, 1)
+			go func() { done <- mgr.Start(runCtx) }()
+			t.Cleanup(func() {
+				cancel()
+				select {
+				case err := <-done:
+					require.NoError(t, err)
+				case <-time.After(10 * time.Second):
+					t.Error("manager did not stop")
+				}
+				select {
+				case <-mgr.audit.stopper:
+				case <-time.After(10 * time.Second):
+					t.Error("audit loop did not stop")
+				}
+			})
+			require.Eventually(t, func() bool {
+				if !tt.enabled {
+					return scans.Load() > 0
+				}
+				if err := apiClient.Get(ctx, auditTriggerKey, trigger); err != nil || trigger.Status.LastRun == nil {
+					return false
+				}
+				if tt.interval > 0 {
+					return trigger.Status.LastRun.Phase == "Failed"
+				}
+				return trigger.Status.SuccessfulGeneration >= trigger.Generation
+			}, 15*time.Second, 20*time.Millisecond)
+			if !tt.enabled {
+				require.Zero(t, triggerCalls.Load(), "disabled audits must not access the trigger API")
+			}
+		})
+	}
+}
+
+type auditRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f auditRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 // Exercise the real controller and audit loop, not a runner with a stub audit callback.
 func TestAuditTriggerProductionFailures(t *testing.T) {
 	oldInterval, oldMatchKindOnly, oldChunkSize := *auditInterval, *auditMatchKindOnly, *auditChunkSize
-	oldFromCache, oldExport := *auditFromCache, *exportutil.ExportEnabled
+	oldFromCache, oldExport, oldTrigger := *auditFromCache, *exportutil.ExportEnabled, *enableAuditTrigger
 	restore := setAuditGlobalsForReviewTest(t)
 	t.Cleanup(func() {
 		restore()
 		*auditInterval, *auditMatchKindOnly, *auditChunkSize = oldInterval, oldMatchKindOnly, oldChunkSize
-		*auditFromCache, *exportutil.ExportEnabled = oldFromCache, oldExport
+		*auditFromCache, *exportutil.ExportEnabled, *enableAuditTrigger = oldFromCache, oldExport, oldTrigger
 	})
 	*auditInterval, *auditMatchKindOnly, *auditChunkSize = 0, true, 1
 	*auditFromCache = false
+	*enableAuditTrigger = true
 	*apiCacheDir = t.TempDir()
 
 	testScheme := runtime.NewScheme()
@@ -285,9 +415,11 @@ func TestAuditTriggerProductionFailures(t *testing.T) {
 type auditRecordingManager struct {
 	manager.Manager
 	audit *Manager
+	added int
 }
 
 func (m *auditRecordingManager) Add(r manager.Runnable) error {
+	m.added++
 	if am, ok := r.(*Manager); ok {
 		m.audit = am
 	}
