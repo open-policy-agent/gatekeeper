@@ -18,6 +18,19 @@ match_substring () {
   fi
 }
 
+# refute_substring checks that got (arg1) does not contain the substring
+# unwanted (arg2).
+refute_substring () {
+  got="${1}"
+  unwanted="${2}"
+
+  if [[ "$got" =~ .*"$unwanted".* ]]; then
+    printf "ERROR: expected output not to contain substring '%s'\n" "$unwanted"
+    printf "GOT: %s\n" "$got"
+    exit 1
+  fi
+}
+
 strip_warning_lines () {
   output_text="${1}"
 
@@ -56,6 +69,82 @@ match_yaml_msg () {
 @test "gator test doesn't wait on stdin input" {
   # this should fail with "no input data identified"
   ! bin/gator test
+}
+
+@test "external data requires explicit enable and trusted Provider paths" {
+  policy="$BATS_TEST_DIRNAME/fixtures/externaldata/policy.yaml"
+  provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider-invalid.yaml"
+
+  run bin/gator test --filename="$policy" --enable-external-data
+  [ "$status" -eq 1 ]
+  match_substring "$output" "--enable-external-data requires --external-data-providers"
+
+  run bin/gator test --filename="$policy" --external-data-providers="$provider"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "--external-data-providers requires --enable-external-data=true"
+
+  run bin/gator test --filename="$policy" --enable-external-data=false --external-data-providers="$provider"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "--external-data-providers requires --enable-external-data=true"
+
+  run bin/gator test --filename="$policy" --enable-external-data --external-data-providers=
+  [ "$status" -eq 1 ]
+  match_substring "$output" "--external-data-providers path must not be empty"
+
+  # Flag and Provider errors are reported before regular input is read.
+  missing_input="$BATS_TEST_TMPDIR/missing-input.yaml"
+  missing_provider="$BATS_TEST_TMPDIR/missing-provider.yaml"
+
+  run bin/gator test --filename="$missing_input" --enable-external-data
+  [ "$status" -eq 1 ]
+  match_substring "$output" "--enable-external-data requires --external-data-providers"
+  refute_substring "$output" "missing-input.yaml"
+
+  run bin/gator test --filename="$missing_input" --enable-external-data --external-data-providers="$missing_provider"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "missing-provider.yaml"
+  refute_substring "$output" "missing-input.yaml"
+}
+
+@test "external data never trusts Provider objects from regular input or stdin" {
+  policy="$BATS_TEST_DIRNAME/fixtures/externaldata/policy.yaml"
+  provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider.yaml"
+  invalid_provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider-invalid.yaml"
+
+  run bin/gator test --filename="$policy" --enable-external-data --external-data-providers="$provider" --filename="$provider"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "read only from --external-data-providers"
+
+  run bin/gator test --filename="$policy" --enable-external-data --external-data-providers="$provider" < "$provider"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "read only from --external-data-providers"
+
+  # An invalid Provider is reported before regular input is read.
+  missing_input="$BATS_TEST_TMPDIR/missing-input.yaml"
+  run bin/gator test --filename="$missing_input" --enable-external-data --external-data-providers="$invalid_provider"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "reading external data Providers"
+  match_substring "$output" "only HTTPS scheme is supported"
+  refute_substring "$output" "missing-input.yaml"
+
+  run bin/gator test --filename="$policy"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "external_data"
+}
+
+@test "external data never trusts Provider objects from OCI artifacts" {
+  provider="$BATS_TEST_DIRNAME/fixtures/externaldata/provider.yaml"
+  policy="$BATS_TEST_DIRNAME/fixtures/externaldata/policy.yaml"
+  img=localhost:5000/gator/untrusted-external-data-provider:v1
+  media_type=:application/vnd.oci.image.layer.v1.tar+gzip
+
+  pushd "$BATS_TEST_DIRNAME/fixtures/externaldata"
+  oras push "$img" "./provider.yaml$media_type"
+  popd
+  run bin/gator test --plain-http --image="$img" --filename="$policy" \
+    --enable-external-data --external-data-providers="$provider"
+  [ "$status" -eq 1 ]
+  match_substring "$output" "read only from --external-data-providers"
 }
 
 @test "manifest with no violations piped to stdin returns 0 exit status" {
