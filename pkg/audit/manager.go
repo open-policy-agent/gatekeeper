@@ -1036,6 +1036,9 @@ func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, r
 			}
 			if err != nil {
 				log.Error(err, "audit manager audit() failed")
+				if runner != nil && runner.pending != nil {
+					scheduleRetry()
+				}
 			} else {
 				resetRetry()
 			}
@@ -1379,6 +1382,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 
 	ucloop.log.Info("starting update constraints loop", "constraints to update", fmt.Sprintf("%v", ucloop.uc))
 
+	pendingErrors := make(map[util.KindVersionName]error)
 	updateLoop := func() (bool, error) {
 		for key := range ucloop.uc {
 			select {
@@ -1400,9 +1404,11 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					if apierrors.IsNotFound(err) {
 						ucloop.log.Info("could not find constraint", "name", key.Name, "namespace", key.Namespace)
 						delete(ucloop.uc, key)
+						delete(pendingErrors, key)
 						continue
 					} else {
 						ucloop.log.Error(err, "could not get latest constraint during update", "name", key.Name, "namespace", key.Namespace)
+						pendingErrors[key] = fmt.Errorf("getting constraint %s %s: %w", constraint.GroupVersionKind(), namespacedName, err)
 						continue
 					}
 				}
@@ -1411,6 +1417,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					err := ucloop.updateConstraintStatus(ctx, constraint, emptyAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						ucloop.log.Error(err, "could not update constraint status", "name", key.Name, "namespace", key.Namespace)
+						pendingErrors[key] = fmt.Errorf("updating constraint %s %s status: %w", constraint.GroupVersionKind(), namespacedName, err)
 						continue
 					}
 				} else {
@@ -1418,10 +1425,12 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					err := ucloop.updateConstraintStatus(ctx, constraint, constraintAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						ucloop.log.Error(err, "could not update constraint status", "name", key.Name, "namespace", key.Namespace)
+						pendingErrors[key] = fmt.Errorf("updating constraint %s %s status: %w", constraint.GroupVersionKind(), namespacedName, err)
 						continue
 					}
 				}
 				delete(ucloop.uc, key)
+				delete(pendingErrors, key)
 			}
 		}
 		if len(ucloop.uc) == 0 {
@@ -1436,8 +1445,12 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		Jitter:   1,
 		Steps:    5,
 	}, func(context.Context) (bool, error) { return updateLoop() }); err != nil {
-		ucloop.err = err
-		ucloop.log.Error(err, "could not update constraint reached max retries", "remaining update constraints", fmt.Sprintf("%v", ucloop.uc))
+		errs := []error{err}
+		for _, cause := range pendingErrors {
+			errs = append(errs, cause)
+		}
+		ucloop.err = errors.Join(errs...)
+		ucloop.log.Error(ucloop.err, "could not update constraint reached max retries", "remaining update constraints", fmt.Sprintf("%v", ucloop.uc))
 	}
 }
 

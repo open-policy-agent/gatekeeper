@@ -78,7 +78,9 @@ the interval set to zero, auditing is fully disabled.
 
 If a completion cannot be persisted, Gatekeeper retains
 the highest successful and failed generations in memory and retries without blocking periodic scans.
-Failed periodic audits wait for the next configured interval; they do not schedule fast retries.
+Failed periodic scans wait for the next configured interval; they do not schedule fast scan retries.
+Completion-status persistence failures from periodic runs use the same bookkeeping retry backoff
+as on-demand runs, without repeating the scan unless a new request needs one.
 
 ## Reading Audit Results
 

@@ -423,6 +423,60 @@ func TestPeriodicAuditFailureDoesNotScheduleRetry(t *testing.T) {
 	require.Never(t, func() bool { return reads.Load() != count }, 1500*time.Millisecond, 10*time.Millisecond)
 }
 
+func TestPeriodicAuditRetriesCompletionWithoutRescanning(t *testing.T) {
+	for _, auditErr := range []error{nil, errors.New("audit failed")} {
+		name := "success"
+		if auditErr != nil {
+			name = "failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			trigger := newAuditTrigger(7)
+			trigger.Status.SuccessfulGeneration = 7
+			c := newAuditTriggerClient(t, trigger)
+			var reject atomic.Bool
+			reject.Store(true)
+			wrapped := interceptor.NewClient(c, interceptor.Funcs{
+				SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+					if trigger, ok := obj.(*auditv1alpha1.AuditTrigger); ok && trigger.Status.LastRun.Phase != "Running" && reject.Swap(false) {
+						return apierrors.NewForbidden(schema.GroupResource{Resource: "audittriggers/status"}, obj.GetName(), errors.New("denied"))
+					}
+					return c.SubResource(name).Update(ctx, obj, opts...)
+				},
+			})
+			var runs atomic.Int32
+			runner := newAuditTriggerRunner(wrapped, func(context.Context) error {
+				runs.Add(1)
+				return auditErr
+			})
+			am := &Manager{stopper: make(chan struct{}), auditTriggerWake: make(chan struct{}, 1)}
+			ticks := make(chan time.Time, 1)
+			timerClock := clocktesting.NewFakeClock(time.Now())
+			ctx, cancel := context.WithCancel(context.Background())
+			go am.runAuditLoop(ctx, ticks, runner, timerClock)
+			t.Cleanup(func() {
+				cancel()
+				select {
+				case <-am.stopper:
+				case <-time.After(5 * time.Second):
+					t.Error("audit loop did not stop")
+				}
+			})
+			ticks <- time.Now()
+			require.Eventually(t, timerClock.HasWaiters, 5*time.Second, time.Millisecond)
+			require.Equal(t, "Running", getAuditTrigger(t, c).Status.LastRun.Phase)
+			timerClock.Step(1100 * time.Millisecond)
+			require.Eventually(t, func() bool {
+				status := getAuditTrigger(t, c).Status
+				return status.LastRun.CompletedAt != nil && !timerClock.HasWaiters()
+			}, 5*time.Second, time.Millisecond)
+			require.EqualValues(t, 1, runs.Load())
+			if auditErr != nil {
+				require.EqualValues(t, 7, getAuditTrigger(t, c).Status.FailedGeneration)
+			}
+		})
+	}
+}
+
 func TestAuditTriggerRetryBackoff(t *testing.T) {
 	c := newAuditTriggerClient(t, newAuditTrigger(7))
 	var reject atomic.Bool

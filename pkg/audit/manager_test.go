@@ -1618,6 +1618,85 @@ func TestAuditResultsWaitForStatusWrites(t *testing.T) {
 	}
 }
 
+func TestAuditReportingPreservesOperationErrors(t *testing.T) {
+	for _, operation := range []string{"getting", "updating"} {
+		t.Run(operation, func(t *testing.T) {
+			constraint := &unstructured.Unstructured{Object: map[string]interface{}{
+				"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+				"kind":       "TestConstraint",
+				"metadata":   map[string]interface{}{"name": "example"},
+			}}
+			base := fake.NewClientBuilder().WithObjects(constraint).WithStatusSubresource(constraint).Build()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cause := apierrors.NewForbidden(schema.GroupResource{Group: "constraints.gatekeeper.sh", Resource: "testconstraints"}, constraint.GetName(), errors.New("reporting denied"))
+			wrapped := interceptor.NewClient(base, interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if operation == "getting" {
+						cancel()
+						return cause
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+				SubResourceUpdate: func(context.Context, client.Client, string, client.Object, ...client.SubResourceUpdateOption) error {
+					cancel()
+					return cause
+				},
+			})
+			am := &Manager{client: wrapped, log: logr.Discard()}
+			err := am.writeAuditResults(ctx, []schema.GroupVersionKind{constraint.GroupVersionKind()}, nil, time.Now().UTC().Format(time.RFC3339Nano), nil)
+			require.ErrorIs(t, err, context.Canceled)
+			require.ErrorIs(t, err, cause)
+			require.ErrorContains(t, err, operation+" constraint")
+			require.ErrorContains(t, err, "TestConstraint")
+			require.ErrorContains(t, err, constraint.GetName())
+		})
+	}
+}
+
+func TestAuditReportingDropsRecoveredErrors(t *testing.T) {
+	recovered := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+		"kind":       "TestConstraint",
+		"metadata":   map[string]interface{}{"name": "recovered"},
+	}}
+	remaining := recovered.DeepCopy()
+	remaining.SetName("remaining")
+	base := fake.NewClientBuilder().WithObjects(recovered, remaining).WithStatusSubresource(recovered).Build()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	recoveredErr := errors.New("transient read failure")
+	reads := 0
+	wrapped := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if key.Name == recovered.GetName() {
+				reads++
+				if reads == 1 {
+					return recoveredErr
+				}
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+		SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+			if obj.GetName() == remaining.GetName() {
+				return apierrors.NewForbidden(schema.GroupResource{Resource: "testconstraints/status"}, obj.GetName(), errors.New("denied"))
+			}
+			err := c.SubResource(name).Update(ctx, obj, opts...)
+			if err == nil {
+				cancel()
+			}
+			return err
+		},
+	})
+	am := &Manager{client: wrapped, log: logr.Discard()}
+	err := am.writeAuditResults(ctx, []schema.GroupVersionKind{recovered.GroupVersionKind()}, nil, time.Now().UTC().Format(time.RFC3339Nano), nil)
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorContains(t, err, remaining.GetName())
+	require.NotErrorIs(t, err, recoveredErr)
+	require.NotContains(t, err.Error(), recovered.GetName())
+	require.Equal(t, 2, reads)
+}
+
 func TestAuditStatusWritesPreserveResultsAndRejectOlderRuns(t *testing.T) {
 	constraint := &unstructured.Unstructured{Object: map[string]interface{}{
 		"apiVersion": "constraints.gatekeeper.sh/v1beta1",
