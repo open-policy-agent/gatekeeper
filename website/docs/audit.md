@@ -76,9 +76,8 @@ cannot yet be persisted, so another audit will still start within the configured
 enabled, audits can still be requested with an `AuditTrigger`. With both the feature disabled and
 the interval set to zero, auditing is fully disabled.
 
-Trigger-status writes use bounded retries. If a completion cannot be persisted, Gatekeeper retains
+If a completion cannot be persisted, Gatekeeper retains
 the highest successful and failed generations in memory and retries without blocking periodic scans.
-A restart before persistence may rerun the request.
 Failed periodic audits wait for the next configured interval; they do not schedule fast retries.
 
 ## Reading Audit Results

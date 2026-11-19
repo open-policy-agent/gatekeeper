@@ -43,6 +43,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -986,15 +987,17 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 	} else if runner != nil {
 		log.Info("periodic auditing is disabled; audits can still be triggered with AuditTrigger")
 	}
-	am.runAuditLoop(ctx, tickerC, runner)
+	am.runAuditLoop(ctx, tickerC, runner, clock.RealClock{})
 }
 
-func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, runner *auditTriggerRunner) {
+func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, runner *auditTriggerRunner, timerClock clock.Clock) {
 	var triggerWake <-chan struct{}
 	if runner != nil {
 		triggerWake = am.auditTriggerWake
 	}
-	var retryTimer *time.Timer
+	const maxRetryDelay = 30 * time.Second
+	retryDelay := time.Second
+	var retryTimer clock.Timer
 	var retryC <-chan time.Time
 	defer func() {
 		if retryTimer != nil {
@@ -1002,12 +1005,21 @@ func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, r
 		}
 	}()
 	scheduleRetry := func() {
-		if retryTimer == nil {
-			retryTimer = time.NewTimer(time.Second)
-		} else {
-			retryTimer.Reset(time.Second)
+		if retryTimer != nil {
+			retryTimer.Stop()
 		}
-		retryC = retryTimer.C
+		delay := min(wait.Jitter(retryDelay, 0.1), maxRetryDelay)
+		retryDelay = min(retryDelay*2, maxRetryDelay)
+		retryTimer = timerClock.NewTimer(delay)
+		retryC = retryTimer.C()
+	}
+	resetRetry := func() {
+		if retryTimer != nil {
+			retryTimer.Stop()
+			retryTimer = nil
+		}
+		retryC = nil
+		retryDelay = time.Second
 	}
 	for {
 		select {
@@ -1024,6 +1036,8 @@ func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, r
 			}
 			if err != nil {
 				log.Error(err, "audit manager audit() failed")
+			} else {
+				resetRetry()
 			}
 		case <-retryC:
 			retryC = nil
@@ -1036,6 +1050,8 @@ func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, r
 			if err != nil {
 				log.Error(err, "on-demand audit failed")
 				scheduleRetry()
+			} else {
+				resetRetry()
 			}
 		}
 	}

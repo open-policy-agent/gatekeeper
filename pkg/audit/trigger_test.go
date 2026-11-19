@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/clock"
+	clocktesting "k8s.io/utils/clock/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -218,6 +220,44 @@ func TestAuditTriggerRetriesCompletionWrite(t *testing.T) {
 	require.EqualValues(t, 7, getAuditTrigger(t, c).Status.SuccessfulGeneration)
 }
 
+func TestAuditTriggerStatusRetryBudget(t *testing.T) {
+	permanentErr := apierrors.NewForbidden(schema.GroupResource{Resource: "audittriggers/status"}, "audit-trigger", errors.New("denied"))
+	for _, tt := range []struct {
+		name        string
+		err         error
+		cancel      bool
+		wantErr     error
+		minAttempts int
+		maxAttempts int
+	}{
+		{name: "transient failure", err: apierrors.NewServiceUnavailable("unavailable"), wantErr: context.DeadlineExceeded, minAttempts: 2, maxAttempts: 5},
+		{name: "permanent failure", err: permanentErr, wantErr: permanentErr, minAttempts: 1, maxAttempts: 1},
+		{name: "cancellation", err: apierrors.NewServiceUnavailable("unavailable"), cancel: true, wantErr: context.Canceled, minAttempts: 1, maxAttempts: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			trigger := newAuditTrigger(7)
+			c := newAuditTriggerClient(t, trigger)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			attempts := 0
+			wrapped := interceptor.NewClient(c, interceptor.Funcs{
+				SubResourceUpdate: func(context.Context, client.Client, string, client.Object, ...client.SubResourceUpdateOption) error {
+					attempts++
+					if tt.cancel {
+						cancel()
+					}
+					return tt.err
+				},
+			})
+			runner := newAuditTriggerRunner(wrapped, func(context.Context) error { return nil })
+			err := runner.updateStatus(ctx, trigger.UID, func(*auditv1alpha1.AuditTriggerStatus) {})
+			require.ErrorIs(t, err, tt.wantErr)
+			require.GreaterOrEqual(t, attempts, tt.minAttempts)
+			require.LessOrEqual(t, attempts, tt.maxAttempts)
+		})
+	}
+}
+
 func TestAuditTriggerResetsScheduleDespiteCompletionWriteFailure(t *testing.T) {
 	for _, onDemand := range []bool{false, true} {
 		t.Run(map[bool]string{true: "on-demand", false: "scheduled"}[onDemand], func(t *testing.T) {
@@ -365,7 +405,7 @@ func TestPeriodicAuditFailureDoesNotScheduleRetry(t *testing.T) {
 	am := &Manager{stopper: make(chan struct{}), auditTriggerWake: make(chan struct{}, 1)}
 	ticks := make(chan time.Time, 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	go am.runAuditLoop(ctx, ticks, runner)
+	go am.runAuditLoop(ctx, ticks, runner, clock.RealClock{})
 	t.Cleanup(func() {
 		cancel()
 		select {
@@ -381,6 +421,74 @@ func TestPeriodicAuditFailureDoesNotScheduleRetry(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 	count := reads.Load()
 	require.Never(t, func() bool { return reads.Load() != count }, 1500*time.Millisecond, 10*time.Millisecond)
+}
+
+func TestAuditTriggerRetryBackoff(t *testing.T) {
+	c := newAuditTriggerClient(t, newAuditTrigger(7))
+	var reject atomic.Bool
+	reject.Store(true)
+	var attempts atomic.Int32
+	wrapped := interceptor.NewClient(c, interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if reject.Load() {
+				attempts.Add(1)
+				return apierrors.NewForbidden(schema.GroupResource{Resource: "audittriggers"}, key.Name, errors.New("denied"))
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	})
+	runner := newAuditTriggerRunner(wrapped, func(context.Context) error { return nil })
+	am := &Manager{stopper: make(chan struct{}), auditTriggerWake: make(chan struct{}, 1)}
+	timerClock := clocktesting.NewFakeClock(time.Now())
+	ctx, cancel := context.WithCancel(context.Background())
+	go am.runAuditLoop(ctx, nil, runner, timerClock)
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-am.stopper:
+		case <-time.After(5 * time.Second):
+			t.Error("audit loop did not stop")
+		}
+	})
+	waitForRetry := func(want int32) {
+		t.Helper()
+		require.Eventually(t, func() bool {
+			return attempts.Load() == want && timerClock.HasWaiters()
+		}, 5*time.Second, time.Millisecond)
+	}
+	am.auditTriggerWake <- struct{}{}
+	var count int32 = 1
+	waitForRetry(count)
+	for _, delay := range []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second} {
+		timerClock.Step(delay - time.Millisecond)
+		require.Never(t, func() bool { return attempts.Load() != count }, 20*time.Millisecond, time.Millisecond)
+		advance := delay/10 + time.Millisecond
+		if delay == 30*time.Second {
+			advance = time.Millisecond
+		}
+		timerClock.Step(advance)
+		count++
+		waitForRetry(count)
+	}
+
+	// A watch notification bypasses the pending retry and success cancels it.
+	reject.Store(false)
+	am.auditTriggerWake <- struct{}{}
+	require.Eventually(t, func() bool {
+		return getAuditTrigger(t, c).Status.SuccessfulGeneration == 7 && !timerClock.HasWaiters()
+	}, 5*time.Second, time.Millisecond)
+	reject.Store(true)
+	timerClock.Step(time.Hour)
+	require.Never(t, func() bool { return attempts.Load() != count }, 20*time.Millisecond, time.Millisecond)
+
+	am.auditTriggerWake <- struct{}{}
+	count++
+	waitForRetry(count)
+	timerClock.Step(time.Second - time.Millisecond)
+	require.Never(t, func() bool { return attempts.Load() != count }, 20*time.Millisecond, time.Millisecond)
+	timerClock.Step(102 * time.Millisecond)
+	count++
+	waitForRetry(count)
 }
 
 func newAuditTriggerRunner(c client.Client, audit func(context.Context) error) *auditTriggerRunner {

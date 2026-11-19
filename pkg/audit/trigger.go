@@ -190,7 +190,14 @@ func (r *auditTriggerRunner) updateStatus(ctx context.Context, uid types.UID, up
 	// retained in one accumulator so periodic scans can continue during failures.
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	return wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+	backoff := wait.Backoff{
+		Duration: 100 * time.Millisecond,
+		Factor:   2,
+		Jitter:   0.1,
+		Steps:    4,
+		Cap:      800 * time.Millisecond,
+	}
+	return backoff.DelayFunc().Until(ctx, true, true, func(ctx context.Context) (bool, error) {
 		trigger := &auditv1alpha1.AuditTrigger{}
 		if err := r.reader.Get(ctx, auditTriggerKey, trigger); err != nil {
 			if apierrors.IsNotFound(err) {
