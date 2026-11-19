@@ -94,11 +94,17 @@ because evaluation makes outbound requests to the configured Providers. Unlike
 Gator, the controller-manager enables external data by default.
 
 :::warning
-Provider failures, including an unreachable Provider, do not fail the command.
-As in Gatekeeper, they are returned to Rego in the response's `system_error`,
-`errors`, and `status_code` fields. A policy that ignores `system_error` passes
-silently when the Provider is down. To fail closed, add a violation when
-`response.system_error != ""`, as the example template above does.
+During evaluation, a Provider error does not by itself make `gator test` exit
+nonzero. To fail closed, use a constraint with `enforcementAction: deny` and
+have the template report a violation if **any** of these conditions is true:
+
+- `response.system_error != ""`
+- `count(response.errors) > 0`
+- `response.status_code >= 300`
+
+For example, an HTTP 503 response with a JSON error body can leave both
+`system_error` and `errors` empty. The status check in the example template
+above catches this case.
 :::
 
 To reuse a cluster's Provider, export it with
