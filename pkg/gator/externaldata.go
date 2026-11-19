@@ -30,8 +30,8 @@ func WithExternalDataProviders(providers ...*unversioned.Provider) Opt {
 				return nil, nil, fmt.Errorf("invalid Provider %q: %w", provider.Name, err)
 			}
 		}
-		// Setting a Provider cache re-enables external_data, overriding the
-		// DisableBuiltins default in gator clients.
+		// external_data is only available to a driver with a Provider cache, and
+		// only calls the Providers in that cache.
 		return nil, []rego.Arg{rego.AddExternalDataProviderCache(cache)}, nil
 	}
 }

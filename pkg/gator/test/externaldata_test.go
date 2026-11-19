@@ -16,9 +16,13 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/reviews"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/gator/reader"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/v3/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -143,8 +147,7 @@ func TestTestExternalData(t *testing.T) {
 	require.Equal(t, "provider failure", responses.Results()[0].Msg)
 	require.Equal(t, before, requests.Load())
 
-	// external_data is registered process-wide, so check it is still disabled
-	// without the option.
+	// A client created after one with Providers still has no external_data.
 	_, err = Test(objs)
 	require.ErrorContains(t, err, "external_data")
 	plainClient, err := gator.NewOPAClient(false)
@@ -176,6 +179,77 @@ func TestTestExternalData(t *testing.T) {
 	require.Len(t, responses.Results(), 1)
 	require.Equal(t, "provider failure", responses.Results()[0].Msg)
 	require.Equal(t, before, requests.Load())
+}
+
+// Clients with a same-named Provider must each call only their own endpoint,
+// even when one is created after the other and both are then used.
+func TestExternalDataProvidersArePerClient(t *testing.T) {
+	ctx := context.Background()
+	objs := externalDataObjects(t)
+	template, err := reader.ToTemplate(scheme, objs[0])
+	require.NoError(t, err)
+
+	newProviderServer := func(value string) (*unversioned.Provider, *atomic.Int32) {
+		var requests atomic.Int32
+		server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests.Add(1)
+			var request externaldata.ProviderRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decoding Provider request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			var items []externaldata.Item
+			for _, key := range request.Request.Keys {
+				items = append(items, externaldata.Item{Key: key, Value: value})
+			}
+			if err := json.NewEncoder(w).Encode(externaldata.ProviderResponse{
+				APIVersion: "externaldata.gatekeeper.sh/v1beta1",
+				Kind:       "ProviderResponse",
+				Response:   externaldata.Response{Items: items},
+			}); err != nil {
+				t.Errorf("encoding Provider response: %v", err)
+			}
+		}))
+		server.TLS = &tls.Config{MinVersion: tls.VersionTLS13}
+		server.StartTLS()
+		t.Cleanup(server.Close)
+		ca := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
+		return externalDataProvider(externalDataProviderName, server.URL, ca), &requests
+	}
+	newClient := func(provider *unversioned.Provider) gator.Client {
+		client, err := gator.NewOPAClient(false, gator.WithExternalDataProviders(provider))
+		require.NoError(t, err)
+		_, err = client.AddTemplate(ctx, template)
+		require.NoError(t, err)
+		_, err = client.AddConstraint(ctx, objs[1])
+		require.NoError(t, err)
+		return client
+	}
+	review := func(client gator.Client) []string {
+		responses, err := client.Review(ctx, target.AugmentedUnstructured{
+			Object: *objs[2],
+			Source: mutationtypes.SourceTypeOriginal,
+		}, reviews.EnforcementPoint(util.GatorEnforcementPoint))
+		require.NoError(t, err)
+		var msgs []string
+		for _, result := range responses.Results() {
+			msgs = append(msgs, result.Msg)
+		}
+		return msgs
+	}
+
+	denyProvider, denyRequests := newProviderServer("deny")
+	allowProvider, allowRequests := newProviderServer("allow")
+	denyClient := newClient(denyProvider)
+	allowClient := newClient(allowProvider)
+
+	require.Equal(t, []string{"namespace denied"}, review(denyClient))
+	require.Positive(t, denyRequests.Load())
+	require.Zero(t, allowRequests.Load())
+
+	require.Empty(t, review(allowClient))
+	require.Positive(t, allowRequests.Load())
 }
 
 func TestTestExternalDataProviderErrors(t *testing.T) {

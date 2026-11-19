@@ -33,8 +33,7 @@ func init() {
 func Test(objs []*unstructured.Unstructured, opts ...gator.Opt) (*GatorResponses, error) {
 	args := []constraintclient.Opt{constraintclient.Targets(&target.K8sValidationTarget{})}
 
-	// gator.WithExternalDataProviders re-enables external_data.
-	driverArgs := []rego.Arg{rego.DisableBuiltins("external_data")}
+	driverArgs := []rego.Arg{}
 
 	for _, opt := range opts {
 		extraArgs, extraDriverArgs, err := opt()

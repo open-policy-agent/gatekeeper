@@ -17,7 +17,6 @@ func NewOPAClient(includeTrace bool, opts ...Opt) (Client, error) {
 
 	driverArgs := []rego.Arg{
 		rego.Tracing(includeTrace),
-		rego.DisableBuiltins("external_data"),
 	}
 
 	for _, opt := range opts {
