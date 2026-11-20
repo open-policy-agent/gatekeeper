@@ -133,6 +133,8 @@ postUpgrade:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  # Example: {fsGroup: 999, supplementalGroups: [999]}
+  podSecurityContext: {}
 postInstall:
   labelNamespace:
     serviceAccount:
@@ -180,6 +182,8 @@ postInstall:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  # Example: {fsGroup: 999, supplementalGroups: [999]}
+  podSecurityContext: {}
 preUninstall:
   deleteWebhookConfigurations:
     serviceAccount:
@@ -206,6 +210,8 @@ preUninstall:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  # Example: {fsGroup: 999, supplementalGroups: [999]}
+  podSecurityContext: {}
 podAnnotations: {}
 auditPodAnnotations: {}
 podLabels: {}
@@ -359,6 +365,8 @@ crds:
     runAsGroup: 65532
     runAsNonRoot: true
     runAsUser: 65532
+  # Example: {fsGroup: 65532, supplementalGroups: [65532]}
+  podSecurityContext: {}
 pdb:
   controllerManager:
     minAvailable: 1

@@ -29,6 +29,8 @@ spec:
       imagePullSecrets:
       {{- .Values.postInstall.probeWebhook.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.postInstall.podSecurityContext | nindent 8 }}
       volumes:
       {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
       containers:

@@ -31,6 +31,8 @@ spec:
       {{- if .Values.postUpgrade.labelNamespace.priorityClassName }}
       priorityClassName: {{ .Values.postUpgrade.labelNamespace.priorityClassName }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.postUpgrade.podSecurityContext | nindent 8 }}
       containers:
         - name: kubectl-label
           image: "{{ .Values.postUpgrade.labelNamespace.image.repository }}:{{ .Values.postUpgrade.labelNamespace.image.tag }}"
