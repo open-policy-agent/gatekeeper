@@ -134,7 +134,7 @@ func runReviewObjectsBenchmark(b *testing.B, rootDir string) {
 		totalViolationsPerEnforcementAction := map[util.EnforcementAction]int64{}
 		auditExportPublishingState := &auditExportPublishingState{Errors: map[string]error{}}
 
-		require.NoError(b, am.reviewObjects(context.Background(), "Namespace", 1, newNSCache(), updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, "benchmark-timestamp", auditExportPublishingState))
+		require.NoError(b, am.reviewObjects(context.Background(), "Namespace", 1, newNSCache(), &objectReviewCoverage{}, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, "benchmark-timestamp", auditExportPublishingState))
 	}
 }
 

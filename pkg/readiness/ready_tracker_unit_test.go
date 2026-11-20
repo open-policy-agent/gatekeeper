@@ -350,20 +350,141 @@ func TestSatisfiedForAudit(t *testing.T) {
 			rt.templates.ExpectationsDone()
 			rt.config.ExpectationsDone()
 			rt.syncsets.ExpectationsDone()
+			require.False(t, rt.SatisfiedForAudit(true), "initial synced data is missing")
+			require.False(t, rt.SatisfiedForAudit(false))
+			data.Observe(pod)
+			require.True(t, rt.SatisfiedForAudit(true), "cache scans need neither expansion templates nor mutators")
+			require.Equal(t, !expansion, rt.SatisfiedForAudit(false))
 			if expansion {
 				rt.expansions.ExpectationsDone()
+				require.False(t, rt.SatisfiedForAudit(false), "discovery expansion can still use mutators")
 			}
-			require.False(t, rt.SatisfiedForAudit(), "initial synced data is missing")
-			data.Observe(pod)
-			require.Equal(t, !expansion, rt.SatisfiedForAudit(), "only expansion can use mutators during audit")
 			require.False(t, rt.Satisfied(), "the full readiness probe still depends on mutators")
 			rt.assignMetadata.ExpectationsDone()
 			rt.assign.ExpectationsDone()
 			rt.modifySet.ExpectationsDone()
 			rt.assignImage.ExpectationsDone()
-			require.True(t, rt.SatisfiedForAudit())
+			require.True(t, rt.SatisfiedForAudit(false))
 		})
 	}
+}
+
+func TestCollectDeletedOptionalExpectations(t *testing.T) {
+	s := mustInitializeScheme(runtime.NewScheme())
+	for _, tc := range []struct {
+		object client.Object
+		gvk    schema.GroupVersionKind
+	}{
+		{&externaldatav1beta1.Provider{}, externaldatav1beta1.SchemeGroupVersion.WithKind("Provider")},
+		{&expansionv1alpha1.ExpansionTemplate{}, expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate")},
+		{&mutationv1.Assign{}, mutationv1.GroupVersion.WithKind("Assign")},
+		{&mutationv1.AssignMetadata{}, mutationv1.GroupVersion.WithKind("AssignMetadata")},
+		{&mutationv1.ModifySet{}, mutationv1.GroupVersion.WithKind("ModifySet")},
+		{&mutationsv1alpha1.AssignImage{}, mutationsv1alpha1.GroupVersion.WithKind("AssignImage")},
+	} {
+		t.Run(tc.gvk.Kind, func(t *testing.T) {
+			ctx := t.Context()
+			c := fake.NewClientBuilder().WithScheme(s).Build()
+			live := tc.object
+			live.SetName("still-present")
+			deleted, ok := live.DeepCopyObject().(client.Object)
+			require.True(t, ok)
+			deleted.SetName("deleted-before-watch")
+			require.NoError(t, c.Create(ctx, live))
+			require.NoError(t, c.Create(ctx, deleted))
+			rt := NewTracker(c, true, true, true)
+			objects := rt.For(tc.gvk)
+			objects.Expect(live)
+			objects.Expect(deleted)
+			objects.ExpectationsDone()
+			require.NoError(t, c.Delete(ctx, deleted))
+
+			// A LIST is not an ingestion event: the surviving object must
+			// still be observed by its controller, not cleared by collection.
+			rt.collectInvalidExpectations(ctx)
+			require.False(t, objects.Satisfied())
+			objects.Observe(live)
+			require.True(t, objects.Satisfied(), "the missed delete must not leave the tracker stuck")
+		})
+	}
+}
+
+func TestCollectionFailureDoesNotCancelOrStarve(t *testing.T) {
+	providersUnavailable := true
+	rt := NewTracker(listerFunc(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+		if strings.TrimSuffix(list.GetObjectKind().GroupVersionKind().Kind, "List") == "Provider" && providersUnavailable {
+			return fmt.Errorf("provider list unavailable")
+		}
+		return nil // Complete empty list for the requested kind.
+	}), false, true, true)
+	rt.externalDataProvider.Expect(&testExternalDataProvider)
+	rt.externalDataProvider.ExpectationsDone()
+	rt.expansions.Expect(&testExpansionTemplate)
+	rt.expansions.ExpectationsDone()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	rt.collectInvalidExpectations(ctx)
+	require.NoError(t, ctx.Err())
+	require.False(t, rt.externalDataProvider.Satisfied(), "a failing LIST is not proof of deletion")
+	require.True(t, rt.expansions.Satisfied(), "a different kind's failed LIST must not block collection")
+
+	providersUnavailable = false
+	rt.collectInvalidExpectations(ctx)
+	require.True(t, rt.externalDataProvider.Satisfied())
+}
+
+func TestCollectionRequiresMatchingProviderList(t *testing.T) {
+	provider := externaldatav1beta1.SchemeGroupVersion.WithKind("Provider")
+	other := mutationv1.GroupVersion.WithKind("Assign")
+	for _, tc := range []struct {
+		name  string
+		reply func(*unstructured.UnstructuredList)
+	}{
+		{"wrong list", func(ul *unstructured.UnstructuredList) {
+			ul.SetGroupVersionKind(other.GroupVersion().WithKind("AssignList"))
+		}},
+		{"wrong item", func(ul *unstructured.UnstructuredList) {
+			ul.Items = []unstructured.Unstructured{*fakes.UnstructuredFor(other, "", "other")}
+		}},
+		{"incomplete list", func(ul *unstructured.UnstructuredList) { ul.SetContinue("next-page") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := NewTracker(listerFunc(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+				ul, ok := list.(*unstructured.UnstructuredList)
+				require.True(t, ok)
+				ul.SetGroupVersionKind(provider.GroupVersion().WithKind("ProviderList"))
+				tc.reply(ul)
+				return nil
+			}), false, true, false)
+			rt.externalDataProvider.Expect(&testExternalDataProvider)
+			rt.externalDataProvider.ExpectationsDone()
+			rt.collectInvalidExpectations(t.Context())
+			require.False(t, rt.externalDataProvider.Satisfied(), "the reply cannot establish that the Provider disappeared")
+		})
+	}
+}
+
+func TestCollectSyncedDataWithCustomListKind(t *testing.T) {
+	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Bird"}
+	flock := gvk.GroupVersion().WithKind("Flock")
+	items := []unstructured.Unstructured{*fakes.UnstructuredFor(gvk, "default", "robin")}
+	rt := NewTracker(listerFunc(func(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+		ul, ok := list.(*unstructured.UnstructuredList)
+		require.True(t, ok)
+		ul.SetGroupVersionKind(flock)
+		ul.Items = items
+		return nil
+	}), false, false, false)
+	data := rt.ForData(gvk)
+	errs := make(chan error, 1)
+	rt.makeDataTrackerFor(gvk, data)(t.Context(), errs)
+	require.Empty(t, errs)
+	rt.collectInvalidExpectations(t.Context())
+	require.False(t, data.Satisfied(), "the listed bird has not been observed")
+	items = nil
+	rt.collectInvalidExpectations(t.Context())
+	require.True(t, data.Satisfied(), "an empty Flock confirms deletion")
 }
 
 func Test_ReadyTracker_TrackAssignMetadata(t *testing.T) {

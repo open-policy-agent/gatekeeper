@@ -104,7 +104,7 @@ type Manager struct {
 	getPod func(context.Context) (*corev1.Pod, error)
 
 	auditTriggerWake chan struct{}
-	initialDataReady func() bool
+	initialDataReady func(fromCache bool) bool
 }
 
 // StatusViolation represents each violation under status.
@@ -281,6 +281,20 @@ func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
 	timestamp := startTime.UTC().Format(time.RFC3339Nano)
 	am.log = logf.FromContext(ctx).WithValues(logging.AuditID, timestamp)
+
+	// A cold readiness check can defer without starting a run. All other
+	// attempts, including empty scans and actual discovery failures, are reported.
+	checkingReadiness := am.initialDataReady != nil
+	var constraintsGVKs []schema.GroupVersionKind
+	var hasConstraints bool
+	var err error
+	if checkingReadiness {
+		constraintsGVKs, hasConstraints, err = am.prepareAudit(ctx)
+		if onlyAwaitingInitialData(err) {
+			return err
+		}
+	}
+
 	logStart(am.log)
 	auditExportPublishingState := auditExportPublishingState{
 		SuccessCount: 0,
@@ -305,21 +319,11 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Error(err, "failed to report run start time")
 	}
 
-	// Create a new client to get an updated RESTMapper.
-	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
+	if !checkingReadiness {
+		constraintsGVKs, hasConstraints, err = am.prepareAudit(ctx)
+	}
 	if err != nil {
 		return err
-	}
-	am.client = c
-	// don't audit anything until the constraintTemplate crd is in the cluster
-	if err := am.ensureCRDExists(ctx); err != nil {
-		return fmt.Errorf("checking ConstraintTemplate CRD: %w", err)
-	}
-
-	// get all constraint kinds
-	constraintsGVKs, err := am.getAllConstraintKinds()
-	if err != nil {
-		return fmt.Errorf("discovering constraint kinds: %w", err)
 	}
 
 	updateLists := make(map[util.KindVersionName]*LimitQueue)
@@ -330,25 +334,8 @@ func (am *Manager) audit(ctx context.Context) error {
 		totalViolationsPerEnforcementAction[action] = 0
 	}
 
-	hasConstraints, err := am.hasConstraintInstances(ctx, constraintsGVKs)
-	if err != nil {
-		am.log.Error(err, "unable to determine whether constraints exist; continuing audit")
-	} else if !hasConstraints {
+	if !hasConstraints {
 		return am.handleNoConstraints(totalViolationsPerEnforcementAction)
-	}
-	if am.initialDataReady != nil {
-		if !am.initialDataReady() {
-			// Only a successful preflight distinguishes slow ingestion from
-			// a genuinely incomplete scan.
-			if err != nil {
-				return fmt.Errorf("checking for constraint instances: %w", err)
-			}
-			am.log.Info("Deferring audit until initial policy and data are ingested")
-			return errAwaitingInitialData
-		}
-		// Startup-only, shared by every run source, including a scheduled
-		// scan when the singleton cannot be read.
-		am.initialDataReady = nil
 	}
 
 	if *auditFromCache {
@@ -387,6 +374,40 @@ func (am *Manager) audit(ctx context.Context) error {
 
 	// update constraints for each kind
 	return am.writeAuditResults(ctx, constraintsGVKs, updateLists, timestamp, totalViolationsPerConstraint)
+}
+
+func (am *Manager) prepareAudit(ctx context.Context) ([]schema.GroupVersionKind, bool, error) {
+	// Use a fresh RESTMapper for each attempt.
+	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme()})
+	if err != nil {
+		return nil, false, err
+	}
+	am.client = c
+	if err := am.ensureCRDExists(ctx); err != nil {
+		return nil, false, fmt.Errorf("checking ConstraintTemplate CRD: %w", err)
+	}
+	kinds, err := am.getAllConstraintKinds()
+	if err != nil {
+		return nil, false, fmt.Errorf("discovering constraint kinds: %w", err)
+	}
+	hasConstraints, err := am.hasConstraintInstances(ctx, kinds)
+	if err == nil && !hasConstraints {
+		return kinds, false, nil
+	}
+	if am.initialDataReady != nil {
+		if !am.initialDataReady(*auditFromCache) {
+			if err != nil {
+				return nil, false, fmt.Errorf("checking for constraint instances: %w", err)
+			}
+			am.log.Info("Deferring audit until initial policy and data are ingested")
+			return nil, false, errAwaitingInitialData
+		}
+		am.initialDataReady = nil
+	}
+	if err != nil {
+		am.log.Error(err, "unable to determine whether constraints exist; continuing audit")
+	}
+	return kinds, true, nil
 }
 
 // Audits server resources via the discovery client.
@@ -523,6 +544,7 @@ func (am *Manager) auditResources(
 	}
 
 	reviewedKind := false
+	var coverage objectReviewCoverage
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
@@ -558,8 +580,7 @@ func (am *Manager) auditResources(
 					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
 					listErr := fmt.Errorf("listing resources for %s, Kind=%s: %w", gv, kind, err)
 					// A failure resolving the REST mapping or fetching a later page isn't a scoped LIST denial.
-					var mappingErr *apiutil.ErrResourceDiscoveryFailed
-					if opts.Continue == "" && apierrors.IsForbidden(err) && !errors.As(err, &mappingErr) {
+					if opts.Continue == "" && isForbiddenResourceRead(err) {
 						recordScopeError(listErr)
 					} else {
 						errs = appendAuditError(errs, listErr)
@@ -614,7 +635,7 @@ func (am *Manager) auditResources(
 			}
 			// Loop through all subDirs to review all files for this kind.
 			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
-			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, &coverage, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
 			if err != nil {
 				errs = appendAuditError(errs, err)
 				continue
@@ -624,6 +645,9 @@ func (am *Manager) auditResources(
 		}
 	}
 
+	if coverage.deniedNamespace != nil && !coverage.reviewed {
+		errs = appendAuditError(errs, fmt.Errorf("no objects could be reviewed: %w", coverage.deniedNamespace))
+	}
 	if !reviewedKind && len(errs) == 0 {
 		if skippedScope != nil {
 			return fmt.Errorf("no resource kinds could be audited: %w", skippedScope)
@@ -633,6 +657,11 @@ func (am *Manager) auditResources(
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func isForbiddenResourceRead(err error) bool {
+	var mappingErr *apiutil.ErrResourceDiscoveryFailed
+	return apierrors.IsForbidden(err) && !errors.As(err, &mappingErr)
 }
 
 func shouldAuditKind(matchedKinds map[string]bool, kind string) bool {
@@ -733,7 +762,13 @@ func nsMapFromObjs(objs []unstructured.Unstructured) (map[string]*corev1.Namespa
 	return nsMap, nil
 }
 
-func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
+// Retain the previous results if every review candidate needed an unreadable namespace.
+type objectReviewCoverage struct {
+	reviewed        bool
+	deniedNamespace error
+}
+
+func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache, coverage *objectReviewCoverage,
 	updateLists map[util.KindVersionName]*LimitQueue,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
@@ -762,7 +797,14 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					nsRef, err := nsCache.Get(ctx, am.client, objNs)
 					if err != nil {
 						am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
-						errs = appendAuditError(errs, fmt.Errorf("reading namespace %q for audit: %w", objNs, err))
+						readErr := fmt.Errorf("reading namespace %q for audit: %w", objNs, err)
+						if !*enableAuditTrigger && isForbiddenResourceRead(err) {
+							if coverage.deniedNamespace == nil {
+								coverage.deniedNamespace = boundedAuditError(readErr)
+							}
+						} else {
+							errs = appendAuditError(errs, readErr)
+						}
 						return
 					}
 					ns = &nsRef
@@ -833,6 +875,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					)
 				}
 
+				coverage.reviewed = true
 				if len(resp.Results()) > 0 {
 					results := ToResults(&augmentedObj.Object, resp)
 					am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)

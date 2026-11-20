@@ -14,6 +14,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	auditv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/audit/v1alpha1"
+	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/expansion/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
@@ -29,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -255,6 +257,66 @@ func TestAuditTriggerColdStart(t *testing.T) {
 			return
 		}
 	}
+
+	// No expansion informer is registered in these managers: the tracker
+	// sees the template in its initial LIST, but never receives a delete event.
+	et := &expansionv1alpha1.ExpansionTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "missed-at-startup"},
+		Spec: expansionv1alpha1.ExpansionTemplateSpec{
+			TemplateSource: "spec.template",
+			GeneratedGVK:   expansionv1alpha1.GeneratedGVK{Version: "v1", Kind: "Pod"},
+		},
+	}
+	require.NoError(t, api.Create(ctx, et))
+	for _, tc := range []struct {
+		name      string
+		fromCache bool
+	}{
+		{name: "cache-does-not-expand", fromCache: true},
+		{name: "discovery-recovers-deleted-expansion"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			*auditInterval, *auditFromCache = 0, tc.fromCache
+			configMap(t, tc.name, "matched")
+			trigger.Spec.AuditNonce = tc.name
+			require.NoError(t, api.Update(ctx, trigger))
+			uid, gen := trigger.UID, trigger.Generation
+			var coldChecks atomic.Int32
+			tracker := startRestartTestManager(t, cfg, s, testutils.SetupDataClient(t), tc.name, &coldChecks)
+			etTracker := tracker.For(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
+			require.Eventually(t, etTracker.Populated, timeout, tick)
+			require.False(t, etTracker.Satisfied())
+			if !tc.fromCache {
+				require.Eventually(t, func() bool { return coldChecks.Load() > 0 }, timeout, tick)
+				require.NoError(t, api.Get(ctx, auditTriggerKey, trigger))
+				require.Less(t, trigger.Status.SuccessfulGeneration, gen)
+				require.Less(t, trigger.Status.FailedGeneration, gen)
+				require.Equal(t, previous, status(t))
+				require.NoError(t, api.Delete(ctx, et))
+			}
+			require.Eventually(t, func() bool {
+				return api.Get(ctx, auditTriggerKey, trigger) == nil && trigger.Status.SuccessfulGeneration == gen
+			}, timeout, tick, "the original request must complete without a second nonce")
+			require.Equal(t, uid, trigger.UID)
+			require.Equal(t, gen, trigger.Generation)
+			published := status(t)
+			require.NotEqual(t, previous.AuditTimestamp, published.AuditTimestamp)
+			require.Equal(t, previous.TotalViolations+1, published.TotalViolations)
+			names := func(result auditResult) []string {
+				var names []string
+				for _, v := range result.Violations {
+					names = append(names, v.Name)
+				}
+				return names
+			}
+			require.ElementsMatch(t, append(names(previous), tc.name), names(published))
+			if tc.fromCache {
+				require.False(t, tracker.Satisfied(), "cache audit completion must not release overall pod readiness")
+				require.NoError(t, api.Get(ctx, client.ObjectKeyFromObject(et), et))
+			}
+			previous = published
+		})
+	}
 }
 
 func startRestartTestManager(t *testing.T, cfg *rest.Config, s *runtime.Scheme, opa *constraintclient.Client, podName string, coldChecks *atomic.Int32) *readiness.Tracker {
@@ -268,7 +330,7 @@ func startRestartTestManager(t *testing.T, cfg *rest.Config, s *runtime.Scheme, 
 	})
 	require.NoError(t, err)
 	mgr := &auditRecordingManager{Manager: m}
-	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false, false)
+	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false, true)
 	require.NoError(t, err)
 	wm, err := watch.New(mgr.GetCache())
 	require.NoError(t, err)
@@ -283,8 +345,11 @@ func startRestartTestManager(t *testing.T, cfg *rest.Config, s *runtime.Scheme, 
 	require.NoError(t, adder.Add(mgr))
 	require.NoError(t, AddToManager(mgr, &Dependencies{
 		Client: opa, ProcessExcluder: excluder, ExpansionSystem: expansion.NewSystem(nil),
-		InitialDataReady: func() bool {
-			ready := tracker.SatisfiedForAudit()
+		CacheLister: NewAuditCacheLister(mgr.GetCache(), &fakeWatchIterator{gvksToList: []schema.GroupVersionKind{
+			corev1.SchemeGroupVersion.WithKind("ConfigMap"), corev1.SchemeGroupVersion.WithKind("Namespace"),
+		}}),
+		InitialDataReady: func(fromCache bool) bool {
+			ready := tracker.SatisfiedForAudit(fromCache)
 			if !ready && coldChecks != nil {
 				coldChecks.Add(1)
 			}

@@ -826,7 +826,7 @@ func TestReviewObjectsPropagatesFailures(t *testing.T) {
 			case "policy review":
 				am.opa = auditClientWithoutAuditEnforcementPoint(t)
 			}
-			err := am.reviewObjects(context.Background(), "Pod", 1, newNSCache(),
+			err := am.reviewObjects(context.Background(), "Pod", 1, newNSCache(), &objectReviewCoverage{},
 				map[util.KindVersionName]*LimitQueue{}, map[util.KindVersionName]int64{},
 				map[util.EnforcementAction]int64{}, "test", &auditExportPublishingState{})
 			require.Error(t, err)
@@ -968,7 +968,7 @@ func runReviewObjectsSpool(t *testing.T, objects []unstructured.Unstructured, ba
 	totalViolationsPerEnforcementAction := map[util.EnforcementAction]int64{}
 	auditExportPublishingState := &auditExportPublishingState{Errors: map[string]error{}}
 
-	require.NoError(t, am.reviewObjects(context.Background(), kind, 1, newNSCache(), updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, "test-timestamp", auditExportPublishingState))
+	require.NoError(t, am.reviewObjects(context.Background(), kind, 1, newNSCache(), &objectReviewCoverage{}, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, "test-timestamp", auditExportPublishingState))
 
 	return summarizeReviewObjects(updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
 }

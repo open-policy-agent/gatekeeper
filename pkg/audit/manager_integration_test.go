@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -17,6 +18,8 @@ import (
 	auditv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/audit/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/export/disk"
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
@@ -140,7 +143,7 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 			mgr := &auditRecordingManager{Manager: realManager}
 			deps := &Dependencies{}
 			if tt.enabled {
-				deps.InitialDataReady = func() bool { return false }
+				deps.InitialDataReady = func(bool) bool { return false }
 			}
 			require.NoError(t, AddToManager(mgr, deps))
 			if !tt.enabled && tt.interval == 0 {
@@ -291,7 +294,7 @@ func newAuditScanFixture(t *testing.T) *auditScanFixture {
 	require.NoError(t, err)
 	f.deps = &Dependencies{
 		Client:           opa,
-		InitialDataReady: func() bool { return true },
+		InitialDataReady: func(bool) bool { return true },
 		ProcessExcluder:  process.New(),
 		ExpansionSystem:  expansion.NewSystem(nil),
 	}
@@ -337,6 +340,9 @@ func TestAuditResourceCoverage(t *testing.T) {
 	})
 	*apiCacheDir, *auditFromCache = t.TempDir(), false
 	f := newAuditScanFixture(t)
+	const restrictedNS = "audit-restricted"
+	const nsPath = "/api/v1/namespaces/"
+	require.NoError(t, f.client.Create(t.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: restrictedNS}}))
 	core, logs := observer.New(zap.InfoLevel)
 	log = zapr.NewLogger(zap.New(core)).WithName("controller").WithValues(logging.Process, "audit")
 	ctx := logf.IntoContext(context.Background(), log)
@@ -395,6 +401,10 @@ func TestAuditResourceCoverage(t *testing.T) {
 				reviewFailure   bool
 			}{
 				{name: "one forbidden LIST", path: "/api/v1/secrets", code: http.StatusForbidden, bestEffort: true},
+				{name: "one forbidden namespace", path: nsPath + restrictedNS, code: http.StatusForbidden, matchOnly: true, bestEffort: true},
+				{name: "forbidden namespace and policy error", path: nsPath + restrictedNS, code: http.StatusForbidden, matchOnly: true, reviewFailure: true},
+				{name: "no readable namespace", path: nsPath, code: http.StatusForbidden, matchOnly: true},
+				{name: "missing namespace", path: nsPath + "default", code: http.StatusNotFound, matchOnly: true},
 				{name: "one unavailable group", path: "/apis/batch/v1", code: http.StatusServiceUnavailable, legacyDiscovery: true, matchOnly: true, bestEffort: true},
 				{name: "partial discovery with policy error", path: "/apis/batch/v1", code: http.StatusServiceUnavailable, legacyDiscovery: true, matchOnly: true, reviewFailure: true},
 				{name: "no usable discovery", path: "/api/v1", code: http.StatusServiceUnavailable, legacyDiscovery: true, matchOnly: true},
@@ -415,6 +425,11 @@ func TestAuditResourceCoverage(t *testing.T) {
 					cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "audit-new", Namespace: "default"}}
 					require.NoError(t, f.client.Create(ctx, cm))
 					t.Cleanup(func() { require.NoError(t, f.client.Delete(ctx, cm)) })
+					if tc.path == nsPath+restrictedNS {
+						other := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: cm.Name, Namespace: restrictedNS}}
+						require.NoError(t, f.client.Create(ctx, other))
+						t.Cleanup(func() { require.NoError(t, f.client.Delete(ctx, other)) })
+					}
 					fault := &auditHTTPFault{
 						code: tc.code, legacyDiscovery: tc.legacyDiscovery,
 						match: func(req *http.Request) bool {
@@ -423,6 +438,12 @@ func TestAuditResourceCoverage(t *testing.T) {
 					}
 					if tc.path == groupDiscoveryPath {
 						fault.match = f.afterConstraintProbe(fault.match)
+					}
+					if tc.path == nsPath {
+						fault.match = func(req *http.Request) bool {
+							name, ok := strings.CutPrefix(req.URL.Path, nsPath)
+							return req.Method == http.MethodGet && ok && name != "" && !strings.Contains(name, "/")
+						}
 					}
 					if tc.name == "forbidden mapping" {
 						// Discover the batch kinds successfully; deny their subsequent REST mapping, not a LIST.
@@ -452,12 +473,15 @@ func TestAuditResourceCoverage(t *testing.T) {
 					if tc.bestEffort {
 						// Both the skipped scope and the readable violation must be visible to operators.
 						errors := logs.FilterLevelExact(zap.ErrorLevel)
-						if tc.legacyDiscovery {
+						switch {
+						case tc.legacyDiscovery:
 							require.NotEmpty(t, errors.Filter(func(e observer.LoggedEntry) bool {
 								message, _ := e.ContextMap()["error"].(string)
 								return strings.Contains(message, "batch/v1")
 							}).All())
-						} else {
+						case tc.path == nsPath+restrictedNS:
+							require.NotEmpty(t, errors.FilterField(zap.String("objNs", restrictedNS)).All())
+						default:
 							require.NotEmpty(t, errors.FilterField(zap.String("kind", "Secret")).All())
 						}
 						require.NotEmpty(t, logs.FilterField(zap.String(logging.EventType, "violation_audited")).
@@ -502,6 +526,70 @@ func TestAuditResourceCoverage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeferredAuditPreservesDiskExport(t *testing.T) {
+	oldGate, oldMatch, oldCache := *enableAuditTrigger, *auditMatchKindOnly, *auditFromCache
+	t.Cleanup(func() { *enableAuditTrigger, *auditMatchKindOnly, *auditFromCache = oldGate, oldMatch, oldCache })
+	t.Cleanup(setAuditGlobalsForReviewTest(t))
+	*apiCacheDir, *enableAuditTrigger, *auditMatchKindOnly, *auditFromCache = t.TempDir(), true, true, false
+	f := newAuditScanFixture(t)
+	*exportutil.ExportEnabled = true
+	ctx := t.Context()
+	dir := t.TempDir()
+	sys := export.NewSystem()
+	require.NoError(t, sys.UpsertConnection(ctx, map[string]interface{}{"path": dir, "maxAuditResults": float64(1)}, *exportutil.AuditConnection, disk.Name))
+	t.Cleanup(func() { require.NoError(t, sys.CloseConnection(*exportutil.AuditConnection)) })
+	f.deps.ExportSystem = sys
+	retained := func() (string, string) {
+		t.Helper()
+		files, err := filepath.Glob(filepath.Join(dir, *exportutil.AuditChannel, "*.log"))
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		data, err := os.ReadFile(files[0])
+		require.NoError(t, err)
+		return files[0], string(data)
+	}
+	warm, err := New(f.mgr, f.deps)
+	require.NoError(t, err)
+	require.NoError(t, warm.audit(ctx))
+	original, before := retained()
+	require.Contains(t, before, "audit-a")
+	require.Contains(t, before, "audit-b")
+
+	ready := false
+	f.deps.InitialDataReady = func(bool) bool { return ready }
+	cold, err := New(f.mgr, f.deps)
+	require.NoError(t, err)
+	for range 3 {
+		require.ErrorIs(t, cold.audit(ctx), errAwaitingInitialData)
+		name, data := retained()
+		require.Equal(t, original, name, "a readiness check must not evict a real export")
+		require.Equal(t, before, data)
+	}
+	require.Zero(t, cold.reporter.auditExportPublished.Load())
+	require.True(t, cold.reporter.startTime.IsZero())
+	require.True(t, cold.reporter.endTime.IsZero())
+
+	ready = true
+	require.NoError(t, cold.audit(ctx))
+	name, data := retained()
+	require.NotEqual(t, original, name)
+	require.Contains(t, data, "audit-a")
+	require.Contains(t, data, "audit-b")
+	require.EqualValues(t, 4, cold.reporter.auditExportPublished.Load(), "one start, two violations, one end")
+
+	// No constraints is a real empty audit, even before initial readiness.
+	require.NoError(t, f.client.Delete(ctx, f.constraint))
+	ready = false
+	empty, err := New(f.mgr, f.deps)
+	require.NoError(t, err)
+	require.NoError(t, empty.audit(ctx))
+	emptyName, emptyData := retained()
+	require.NotEqual(t, name, emptyName)
+	require.Contains(t, emptyData, exportutil.AuditStartedMsg)
+	require.Contains(t, emptyData, exportutil.AuditCompletedMsg)
+	require.EqualValues(t, 2, empty.reporter.auditExportPublished.Load())
 }
 
 // Exercise the real controller and audit loop, not a runner with a stub audit callback.

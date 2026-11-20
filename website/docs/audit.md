@@ -22,9 +22,10 @@ Requests left pending are processed when the feature is enabled.
 With the feature disabled, periodic audits via API discovery support
 [scoped read permissions](operations.md#audit). If a group's resources cannot be discovered
 or the first LIST of a resource kind is forbidden, Gatekeeper logs the error and publishes
-results for the kinds it could audit. Status and violation totals cover **only those kinds**:
-for example, a wildcard constraint may report zero even if an unreadable kind violates it.
-If no eligible kind could be audited after such an error, or if another scan operation fails
+results for the kinds it could audit. If a Namespace GET is forbidden, Gatekeeper skips objects
+whose namespace it could not read. Status and violation totals cover **only the readable scope**:
+for example, a wildcard constraint may report zero even if an unreadable object violates it.
+If no eligible kind could be audited, a Namespace denial prevented every object review, or another scan operation fails
 (for example, fetching a later page or a policy review returning an error), the previous
 statuses and violation totals are retained.
 
@@ -78,6 +79,8 @@ successful generation. A missing required ConstraintTemplate CRD also fails the 
 An absent constraint API is treated as an empty audit.
 Timing metrics and audit-finished logs/export messages mark the end of an attempt, including failed
 attempts; use the trigger's generation watermarks to determine success.
+Waiting for initial ingestion is not an audit attempt: these retries do not update run timing
+metrics, write an export, or evict an earlier export. A completed audit with no findings still does.
 Error collection retains at most ten diagnostic messages of up to 256 bytes each, plus an omission
 marker. Complete per-resource errors are logged rather than retained in the audit result.
 
@@ -89,6 +92,10 @@ process is still ingesting its initial policy or synced data, a pending request 
 generation and retries automatically. No new nonce is needed. This uses Gatekeeper's
 [startup readiness expectations](customize-startup.md); it is not a guarantee that subsequent
 policy or resource updates have reached every cache when an audit starts.
+Cache-based audits (`--audit-from-cache=true`) wait for policy and synced data, but do not
+wait for expansion templates or mutators: they evaluate cached objects without expanding them.
+Discovery-based audits still wait for those inputs when resource expansion is enabled.
+This does not relax the pod's overall readiness check.
 
 A successful on-demand scan resets the periodic audit schedule even if its completion status
 cannot yet be persisted, so another audit will still start within the configured

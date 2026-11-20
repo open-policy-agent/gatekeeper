@@ -26,7 +26,7 @@ import (
 
 type Dependencies struct {
 	Client           *constraintclient.Client
-	InitialDataReady func() bool
+	InitialDataReady func(fromCache bool) bool
 	ProcessExcluder  *process.Excluder
 	CacheLister      *CacheLister
 	ExpansionSystem  *expansion.System

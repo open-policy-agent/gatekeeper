@@ -268,6 +268,12 @@ func (t *Tracker) Satisfied() bool {
 		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "assignImage")
 	}
 
+	if t.expansionEnabled {
+		if !t.expansions.Satisfied() {
+			return false
+		}
+		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "expansiontemplates")
+	}
 	if !t.validationSatisfied() {
 		return false
 	}
@@ -278,10 +284,10 @@ func (t *Tracker) Satisfied() bool {
 	return true
 }
 
-// SatisfiedForAudit checks startup expectations used by policy evaluation.
-// Mutators can affect an audit through expansion, but not otherwise.
-func (t *Tracker) SatisfiedForAudit() bool {
-	if t.expansionEnabled {
+// SatisfiedForAudit checks the startup inputs used by the selected scan.
+// Only discovery-based audits expand resources and apply mutators to resultants.
+func (t *Tracker) SatisfiedForAudit(fromCache bool) bool {
+	if !fromCache && t.expansionEnabled {
 		return t.Satisfied()
 	}
 	return t.validationSatisfied()
@@ -293,13 +299,6 @@ func (t *Tracker) validationSatisfied() bool {
 			return false
 		}
 		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "provider")
-	}
-
-	if t.expansionEnabled {
-		if !t.expansions.Satisfied() {
-			return false
-		}
-		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "expansiontemplates")
 	}
 
 	if operations.HasValidationOperations() {
@@ -507,11 +506,22 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, 
 
 	// there is only ever one GVK for the unsatisfied expectations of a particular objectTracker.
 	gvk := ot.gvk
+	ot.mu.RLock()
+	responseGVK := gvk.GroupVersion().WithKind(ot.listKind)
+	ot.mu.RUnlock()
 	ul := &unstructured.UnstructuredList{}
-	ul.SetGroupVersionKind(gvk)
-	lister := retryLister(t.lister, retryUnlessUnregistered)
-	if err := lister.List(ctx, ul); err != nil {
+	// controller-runtime maps the conventional List kind to the requested resource.
+	ul.SetGroupVersionKind(gvk.GroupVersion().WithKind(gvk.Kind + "List"))
+	// The collection loop retries on its next tick. A failed LIST is not
+	// evidence of deletion and must not prevent collection of other kinds.
+	if err := t.lister.List(ctx, ul); err != nil {
 		return errors.Wrapf(err, "while listing %v in collectForObjectTracker", gvk)
+	}
+	if got := ul.GroupVersionKind(); got != responseGVK {
+		return fmt.Errorf("listing %v: got %v, want %v", gvk, got, responseGVK)
+	}
+	if remaining := ul.GetRemainingItemCount(); ul.GetContinue() != "" || (remaining != nil && *remaining > 0) {
+		return fmt.Errorf("incomplete list for %v", gvk)
 	}
 
 	// identify objects in `unsatisfied` that were not found above.
@@ -522,10 +532,14 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, 
 	for _, o := range unsatisfied {
 		unsatisfiedmap[o] = struct{}{}
 	}
-	for _, o := range ul.Items {
-		k, err := objKeyFromObject(&o)
+	for i := range ul.Items {
+		o := &ul.Items[i]
+		if o.GroupVersionKind() != gvk || o.GetName() == "" {
+			return fmt.Errorf("listing %v: invalid item %d (kind %v, name %q)", gvk, i, o.GroupVersionKind(), o.GetName())
+		}
+		k, err := ot.keyFor(o)
 		if err != nil {
-			return errors.Wrapf(err, "while getting key for %v in collectForObjectTracker", o)
+			return errors.Wrapf(err, "while getting key for %v %q", gvk, o.GetName())
 		}
 		// delete is a no-op if the key isn't found
 		delete(unsatisfiedmap, k)
@@ -564,15 +578,16 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 		log.Error(err, "while collecting for the ConstraintTemplate tracker")
 	}
 
-	ct := t.config
-	err = t.collectForObjectTracker(ctx, ct, nil, "Config")
-	if err != nil {
-		log.Error(err, "while collecting for the Config tracker")
-	}
-
-	err = t.collectForObjectTracker(ctx, t.syncsets, nil, "SyncSet")
-	if err != nil {
-		log.Error(err, "while collecting for the SyncSet tracker")
+	for _, ot := range []*objectTracker{
+		t.config, t.syncsets, t.externalDataProvider, t.expansions,
+		t.assignMetadata, t.assign, t.modifySet, t.assignImage,
+	} {
+		if ot == nil {
+			continue // Optional operation is disabled.
+		}
+		if err := t.collectForObjectTracker(ctx, ot, nil, ot.gvk.Kind); err != nil {
+			log.Error(err, "while collecting deleted expectations", "kind", ot.gvk.Kind)
+		}
 	}
 
 	// collect deleted but expected constraints
@@ -994,6 +1009,13 @@ func (t *Tracker) makeDataTrackerFor(gvk schema.GroupVersionKind, dt Expectation
 			item := &u.Items[i]
 			dt.Expect(item)
 			log.V(logging.DebugLevel).Info("expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
+		}
+		// Record a synced CRD's actual list kind while the initial list still
+		// contains an item of the requested kind. Its relist may be empty.
+		if ot, ok := dt.(*objectTracker); ok && len(u.Items) > 0 && u.Items[0].GroupVersionKind() == gvk && u.GroupVersionKind().GroupVersion() == gvk.GroupVersion() && u.GetKind() != "" {
+			ot.mu.Lock()
+			ot.listKind = u.GetKind()
+			ot.mu.Unlock()
 		}
 	}
 }
