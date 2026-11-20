@@ -339,6 +339,33 @@ func Test_Tracker_TryCancelData(t *testing.T) {
 	}
 }
 
+func TestSatisfiedForAudit(t *testing.T) {
+	for _, expansion := range []bool{false, true} {
+		t.Run(fmt.Sprintf("expansion=%t", expansion), func(t *testing.T) {
+			rt := NewTracker(nil, true, false, expansion)
+			pod := fakes.UnstructuredFor(podGVK, "default", "referenced")
+			data := rt.ForData(podGVK)
+			data.Expect(pod)
+			data.ExpectationsDone()
+			rt.templates.ExpectationsDone()
+			rt.config.ExpectationsDone()
+			rt.syncsets.ExpectationsDone()
+			if expansion {
+				rt.expansions.ExpectationsDone()
+			}
+			require.False(t, rt.SatisfiedForAudit(), "initial synced data is missing")
+			data.Observe(pod)
+			require.Equal(t, !expansion, rt.SatisfiedForAudit(), "only expansion can use mutators during audit")
+			require.False(t, rt.Satisfied(), "the full readiness probe still depends on mutators")
+			rt.assignMetadata.ExpectationsDone()
+			rt.assign.ExpectationsDone()
+			rt.modifySet.ExpectationsDone()
+			rt.assignImage.ExpectationsDone()
+			require.True(t, rt.SatisfiedForAudit())
+		})
+	}
+}
+
 func Test_ReadyTracker_TrackAssignMetadata(t *testing.T) {
 	tcs := []struct {
 		name            string

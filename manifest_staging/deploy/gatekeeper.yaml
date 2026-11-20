@@ -6618,7 +6618,6 @@ spec:
       containers:
       - args:
         - --operation=audit
-        - --enable-audit-trigger=false
         - --operation=status
         - --operation=mutation-status
         - --operation=generate

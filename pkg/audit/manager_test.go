@@ -1630,9 +1630,12 @@ func TestAuditResultsWaitForStatusWrites(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan error, 1)
+			key := util.GetUniqueKey(*constraint)
+			queue := newLimitQueue(1)
+			queue.Push(&StatusViolation{Name: "noncompliant"})
 			go func() {
 				done <- am.writeAuditResults(ctx, []schema.GroupVersionKind{constraint.GroupVersionKind()},
-					nil, time.Now().UTC().Format(time.RFC3339Nano), nil)
+					map[util.KindVersionName]*LimitQueue{key: queue}, time.Now().UTC().Format(time.RFC3339Nano), map[util.KindVersionName]int64{key: 1})
 			}()
 			select {
 			case <-entered:
@@ -1652,7 +1655,16 @@ func TestAuditResultsWaitForStatusWrites(t *testing.T) {
 			} else {
 				close(release)
 				require.NoError(t, <-done)
+				result := constraint.DeepCopy()
+				require.NoError(t, base.Get(ctx, client.ObjectKeyFromObject(constraint), result))
+				violations, _, err := unstructured.NestedSlice(result.Object, "status", "violations")
+				require.NoError(t, err)
+				require.Len(t, violations, 1)
+				violation, ok := violations[0].(map[string]interface{})
+				require.True(t, ok)
+				require.Equal(t, "noncompliant", violation["name"])
 			}
+			require.Nil(t, am.ucloop, "the idle manager must not retain the completed result set")
 		})
 	}
 }

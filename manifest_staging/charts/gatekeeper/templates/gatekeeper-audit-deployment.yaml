@@ -60,7 +60,7 @@ spec:
         {{- end }}
         args:
         - --audit-interval={{ .Values.auditInterval }}
-        {{ if hasKey .Values "enableAuditTrigger" }}- --enable-audit-trigger={{ .Values.enableAuditTrigger }}{{- end }}
+        {{ with include "gatekeeper.auditTriggerFlag" . }}- --enable-audit-trigger={{ . }}{{- end }}
         - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel
           .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}

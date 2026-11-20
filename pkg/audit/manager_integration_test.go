@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -40,6 +41,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
+const groupDiscoveryPath = "/apis"
+
 func TestAuditTriggerFeatureGate(t *testing.T) {
 	oldInterval, oldTrigger := *auditInterval, *enableAuditTrigger
 	restore := setAuditGlobalsForReviewTest(t)
@@ -66,10 +69,12 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 		enabled     bool
 		interval    int64
 		auditSource string
+		missingCRD  bool
 	}{
 		{name: "disabled with zero interval"},
 		{name: "disabled periodic audit without trigger CRD", interval: 1},
 		{name: "enabled on-demand only", enabled: true, auditSource: "on-demand"},
+		{name: "cold on-demand audit fails a missing required CRD", enabled: true, auditSource: "on-demand", missingCRD: true},
 		{name: "enabled periodic audit reports failure", enabled: true, interval: 1, auditSource: "scheduled"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -98,12 +103,16 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 			}
 			var scans, triggerCalls atomic.Int32
 			var fault atomic.Pointer[auditHTTPFault]
-			if tt.enabled && tt.interval > 0 {
+			if tt.missingCRD || (tt.enabled && tt.interval > 0) {
+				code := http.StatusForbidden
+				if tt.missingCRD {
+					code = http.StatusNotFound
+				}
 				fault.Store(&auditHTTPFault{
 					match: func(req *http.Request) bool {
 						return strings.HasSuffix(req.URL.Path, "/customresourcedefinitions/"+crdName)
 					},
-					code: http.StatusForbidden,
+					code: code,
 				})
 			}
 			managerConfig := rest.CopyConfig(cfg)
@@ -129,7 +138,11 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 			})
 			require.NoError(t, err)
 			mgr := &auditRecordingManager{Manager: realManager}
-			require.NoError(t, AddToManager(mgr, &Dependencies{}))
+			deps := &Dependencies{}
+			if tt.enabled {
+				deps.InitialDataReady = func() bool { return false }
+			}
+			require.NoError(t, AddToManager(mgr, deps))
 			if !tt.enabled && tt.interval == 0 {
 				require.Nil(t, mgr.audit)
 				require.Zero(t, mgr.added)
@@ -164,8 +177,8 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 				if err := apiClient.Get(ctx, auditTriggerKey, trigger); err != nil || trigger.Status.LastRun == nil {
 					return false
 				}
-				if tt.interval > 0 {
-					return trigger.Status.LastRun.Phase == "Failed"
+				if tt.interval > 0 || tt.missingCRD {
+					return trigger.Status.FailedGeneration == trigger.Generation && trigger.Status.LastRun.Phase == "Failed"
 				}
 				return trigger.Status.SuccessfulGeneration >= trigger.Generation
 			}, 15*time.Second, 20*time.Millisecond)
@@ -198,21 +211,18 @@ func (f auditRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, err
 	return f(req)
 }
 
-// Exercise the real controller and audit loop, not a runner with a stub audit callback.
-func TestAuditTriggerProductionFailures(t *testing.T) {
-	oldInterval, oldMatchKindOnly, oldChunkSize := *auditInterval, *auditMatchKindOnly, *auditChunkSize
-	oldFromCache, oldExport, oldTrigger := *auditFromCache, *exportutil.ExportEnabled, *enableAuditTrigger
-	restore := setAuditGlobalsForReviewTest(t)
-	t.Cleanup(func() {
-		restore()
-		*auditInterval, *auditMatchKindOnly, *auditChunkSize = oldInterval, oldMatchKindOnly, oldChunkSize
-		*auditFromCache, *exportutil.ExportEnabled, *enableAuditTrigger = oldFromCache, oldExport, oldTrigger
-	})
-	*auditInterval, *auditMatchKindOnly, *auditChunkSize = 0, true, 1
-	*auditFromCache = false
-	*enableAuditTrigger = true
-	*apiCacheDir = t.TempDir()
+type auditScanFixture struct {
+	mgr            manager.Manager
+	deps           *Dependencies
+	client         client.Client
+	constraint     *unstructured.Unstructured
+	constraintPath string
+	faults         atomic.Pointer[auditHTTPFault]
+}
 
+func newAuditScanFixture(t *testing.T) *auditScanFixture {
+	t.Helper()
+	f := &auditScanFixture{}
 	testScheme := runtime.NewScheme()
 	require.NoError(t, scheme.AddToScheme(testScheme))
 	require.NoError(t, apis.AddToScheme(testScheme))
@@ -266,13 +276,12 @@ func TestAuditTriggerProductionFailures(t *testing.T) {
 		}))
 	}
 
-	faults := &atomic.Pointer[auditHTTPFault]{}
 	managerConfig := rest.CopyConfig(cfg)
 	managerConfig.Wrap(func(rt http.RoundTripper) http.RoundTripper {
-		return &auditFaultTransport{RoundTripper: rt, fault: faults}
+		return &auditFaultTransport{RoundTripper: rt, fault: &f.faults}
 	})
 	skipNameValidation := true
-	realManager, err := manager.New(managerConfig, manager.Options{
+	f.mgr, err = manager.New(managerConfig, manager.Options{
 		Scheme:  testScheme,
 		Metrics: metricsserver.Options{BindAddress: "0"},
 		Controller: controllerconfig.Controller{
@@ -280,12 +289,241 @@ func TestAuditTriggerProductionFailures(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	mgr := &auditRecordingManager{Manager: realManager}
-	require.NoError(t, AddToManager(mgr, &Dependencies{
-		Client:          opa,
-		ProcessExcluder: process.New(),
-		ExpansionSystem: expansion.NewSystem(nil),
+	f.deps = &Dependencies{
+		Client:           opa,
+		InitialDataReady: func() bool { return true },
+		ProcessExcluder:  process.New(),
+		ExpansionSystem:  expansion.NewSystem(nil),
+	}
+	f.client, f.constraint = apiClient, constraint
+	f.constraintPath = "/apis/" + constraintsGV + "/" + versionedCRD.Spec.Names.Plural
+	return f
+}
+
+// Do not fault the initial REST mapping or direct constraint discovery.
+func (f *auditScanFixture) afterConstraintProbe(match func(*http.Request) bool) func(*http.Request) bool {
+	var scanning atomic.Bool
+	return func(req *http.Request) bool {
+		if req.URL.Path == f.constraintPath && req.URL.Query().Get("limit") == "1" {
+			scanning.Store(true)
+		}
+		return scanning.Load() && match(req)
+	}
+}
+
+func TestAuditResourcesRejectsEmptyDiscovery(t *testing.T) {
+	t.Cleanup(setAuditGlobalsForReviewTest(t))
+	*apiCacheDir = t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList")
+		_, err := io.WriteString(w, `{"apiVersion":"apidiscovery.k8s.io/v2","kind":"APIGroupDiscoveryList","items":[]}`)
+		if err != nil {
+			t.Errorf("writing discovery: %v", err)
+		}
 	}))
+	t.Cleanup(server.Close)
+	am := &Manager{mgr: &auditResourcesTestManager{config: &rest.Config{Host: server.URL}}}
+	require.ErrorContains(t, am.auditResources(t.Context(), nil, nil, nil, nil, "", nil), "no listable kinds")
+}
+
+// Exercise the scan callbacks used by the periodic loop and the trigger runner
+// synchronously so a second tick can't overwrite the evidence from a failed scan.
+func TestAuditResourceCoverage(t *testing.T) {
+	restore := setAuditGlobalsForReviewTest(t)
+	oldMatch, oldChunk, oldCache, oldTrigger, oldLog := *auditMatchKindOnly, *auditChunkSize, *auditFromCache, *enableAuditTrigger, log
+	t.Cleanup(func() {
+		restore()
+		*auditMatchKindOnly, *auditChunkSize, *auditFromCache, *enableAuditTrigger, log = oldMatch, oldChunk, oldCache, oldTrigger, oldLog
+	})
+	*apiCacheDir, *auditFromCache = t.TempDir(), false
+	f := newAuditScanFixture(t)
+	core, logs := observer.New(zap.InfoLevel)
+	log = zapr.NewLogger(zap.New(core)).WithName("controller").WithValues(logging.Process, "audit")
+	ctx := logf.IntoContext(context.Background(), log)
+
+	for _, mode := range []string{"periodic", "trigger scheduled", "trigger on-demand"} {
+		t.Run(mode, func(t *testing.T) {
+			*enableAuditTrigger = mode != "periodic"
+			am, err := New(f.mgr, f.deps)
+			require.NoError(t, err)
+			trigger := &auditv1alpha1.AuditTrigger{
+				ObjectMeta: metav1.ObjectMeta{Name: auditv1alpha1.AuditTriggerName},
+			}
+			if *enableAuditTrigger {
+				trigger.Spec.AuditNonce = "initial"
+				require.NoError(t, f.client.Create(ctx, trigger))
+				t.Cleanup(func() { require.NoError(t, f.client.Delete(ctx, trigger)) })
+			}
+			runner := auditTriggerRunner{reader: f.client, client: f.client, audit: am.audit, now: time.Now}
+			scan := func(t *testing.T, nonce string) error {
+				t.Helper()
+				if !*enableAuditTrigger {
+					return am.audit(ctx)
+				}
+				require.NoError(t, f.client.Get(ctx, auditTriggerKey, trigger))
+				trigger.Spec.AuditNonce = nonce
+				require.NoError(t, f.client.Update(ctx, trigger))
+				err := runner.run(ctx, mode == "trigger on-demand")
+				require.NoError(t, f.client.Get(ctx, auditTriggerKey, trigger))
+				return err
+			}
+			readStatus := func(t *testing.T) map[string]interface{} {
+				t.Helper()
+				u := f.constraint.DeepCopy()
+				require.NoError(t, f.client.Get(ctx, client.ObjectKeyFromObject(u), u))
+				s, found, err := unstructured.NestedMap(u.Object, "status")
+				require.NoError(t, err)
+				require.True(t, found)
+				return s
+			}
+			checkTotals := func(t *testing.T, status map[string]interface{}, want int64) {
+				t.Helper()
+				require.Equal(t, want, status["totalViolations"])
+				am.reporter.mu.RLock()
+				defer am.reporter.mu.RUnlock()
+				require.Equal(t, want, am.reporter.totalViolationsPerEnforcementAction[util.Dryrun])
+			}
+
+			for _, tc := range []struct {
+				name            string
+				path            string
+				code            int
+				legacyDiscovery bool
+				matchOnly       bool
+				nextPage        bool
+				bestEffort      bool
+				reviewFailure   bool
+			}{
+				{name: "one forbidden LIST", path: "/api/v1/secrets", code: http.StatusForbidden, bestEffort: true},
+				{name: "one unavailable group", path: "/apis/batch/v1", code: http.StatusServiceUnavailable, legacyDiscovery: true, matchOnly: true, bestEffort: true},
+				{name: "partial discovery with policy error", path: "/apis/batch/v1", code: http.StatusServiceUnavailable, legacyDiscovery: true, matchOnly: true, reviewFailure: true},
+				{name: "no usable discovery", path: "/api/v1", code: http.StatusServiceUnavailable, legacyDiscovery: true, matchOnly: true},
+				{name: "total discovery outage", path: groupDiscoveryPath, code: http.StatusServiceUnavailable, matchOnly: true},
+				{name: "no readable kind", path: "/api/v1/configmaps", code: http.StatusForbidden, matchOnly: true},
+				{name: "forbidden continuation", path: "/api/v1/configmaps", code: http.StatusForbidden, matchOnly: true, nextPage: true},
+				{name: "forbidden mapping", path: "/apis/batch/v1", code: http.StatusForbidden, legacyDiscovery: true},
+				{name: "resource LIST not found", path: "/api/v1/secrets", code: http.StatusNotFound},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					*auditMatchKindOnly, *auditChunkSize = true, 1
+					require.NoError(t, scan(t, tc.name+" seed"))
+					previous := readStatus(t)
+					checkTotals(t, previous, 2)
+					previousGeneration := trigger.Status.SuccessfulGeneration
+
+					// Only the new run can have seen this third violating ConfigMap.
+					cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "audit-new", Namespace: "default"}}
+					require.NoError(t, f.client.Create(ctx, cm))
+					t.Cleanup(func() { require.NoError(t, f.client.Delete(ctx, cm)) })
+					fault := &auditHTTPFault{
+						code: tc.code, legacyDiscovery: tc.legacyDiscovery,
+						match: func(req *http.Request) bool {
+							return req.URL.Path == tc.path && (!tc.nextPage || req.URL.Query().Get("continue") != "")
+						},
+					}
+					if tc.path == groupDiscoveryPath {
+						fault.match = f.afterConstraintProbe(fault.match)
+					}
+					if tc.name == "forbidden mapping" {
+						// Discover the batch kinds successfully; deny their subsequent REST mapping, not a LIST.
+						var requests atomic.Int32
+						fault.match = func(req *http.Request) bool {
+							return req.URL.Path == tc.path && requests.Add(1) > 1
+						}
+					}
+					*auditMatchKindOnly = tc.matchOnly
+					if !tc.nextPage {
+						*auditChunkSize = defaultListLimit
+					}
+					logs.TakeAll()
+					if tc.reviewFailure {
+						am.opa = auditClientWithoutAuditEnforcementPoint(t)
+					}
+					f.faults.Store(fault)
+					err := scan(t, tc.name)
+					f.faults.Store(nil)
+					am.opa = f.deps.Client
+					require.Positive(t, fault.hits.Load(), "fault did not reach the scan")
+					if tc.reviewFailure {
+						require.ErrorContains(t, err, "reviewing object")
+					}
+
+					status := readStatus(t)
+					if tc.bestEffort {
+						// Both the skipped scope and the readable violation must be visible to operators.
+						errors := logs.FilterLevelExact(zap.ErrorLevel)
+						if tc.legacyDiscovery {
+							require.NotEmpty(t, errors.Filter(func(e observer.LoggedEntry) bool {
+								message, _ := e.ContextMap()["error"].(string)
+								return strings.Contains(message, "batch/v1")
+							}).All())
+						} else {
+							require.NotEmpty(t, errors.FilterField(zap.String("kind", "Secret")).All())
+						}
+						require.NotEmpty(t, logs.FilterField(zap.String(logging.EventType, "violation_audited")).
+							FilterField(zap.String(logging.ResourceName, cm.Name)).All())
+					}
+					if tc.bestEffort && !*enableAuditTrigger {
+						require.NoError(t, err, "constraint total before/after: %v/%v; timestamp changed: %t; constraint summaries: %d",
+							previous["totalViolations"], status["totalViolations"], previous["auditTimestamp"] != status["auditTimestamp"],
+							logs.FilterField(zap.String(logging.EventType, "constraint_audited")).Len())
+					} else {
+						require.Error(t, err)
+						require.Equal(t, previous, status, "incomplete scan replaced prior status")
+						checkTotals(t, status, 2)
+						require.Empty(t, logs.FilterField(zap.String(logging.EventType, "constraint_audited")).All())
+						if *enableAuditTrigger {
+							require.Equal(t, trigger.Generation, trigger.Status.FailedGeneration)
+							require.Equal(t, previousGeneration, trigger.Status.SuccessfulGeneration)
+							require.Equal(t, "Failed", trigger.Status.LastRun.Phase)
+						}
+
+						// Fault is cleared, but only a fresh scan may replace the old results.
+						require.NoError(t, scan(t, tc.name+" recovered"))
+						status = readStatus(t)
+						if *enableAuditTrigger {
+							require.Equal(t, trigger.Generation, trigger.Status.SuccessfulGeneration)
+							require.Equal(t, "Succeeded", trigger.Status.LastRun.Phase)
+						}
+					}
+					checkTotals(t, status, 3)
+					timestamp, ok := status["auditTimestamp"].(string)
+					require.True(t, ok)
+					require.NotEqual(t, previous["auditTimestamp"], timestamp)
+					require.Contains(t, status["violations"], map[string]interface{}{
+						"group": "", "version": "v1", "kind": "ConfigMap", "namespace": cm.Namespace, "name": cm.Name,
+						"message": "denyall", "enforcementAction": "dryrun",
+					})
+					require.Len(t, logs.FilterField(zap.String(logging.AuditID, timestamp)).
+						FilterField(zap.String(logging.EventType, "constraint_audited")).
+						FilterField(zap.String(logging.ConstraintName, f.constraint.GetName())).
+						FilterField(zap.String(logging.ConstraintViolations, "3")).All(), 1)
+				})
+			}
+		})
+	}
+}
+
+// Exercise the real controller and audit loop, not a runner with a stub audit callback.
+func TestAuditTriggerProductionFailures(t *testing.T) {
+	oldInterval, oldMatchKindOnly, oldChunkSize := *auditInterval, *auditMatchKindOnly, *auditChunkSize
+	oldFromCache, oldExport, oldTrigger := *auditFromCache, *exportutil.ExportEnabled, *enableAuditTrigger
+	restore := setAuditGlobalsForReviewTest(t)
+	t.Cleanup(func() {
+		restore()
+		*auditInterval, *auditMatchKindOnly, *auditChunkSize = oldInterval, oldMatchKindOnly, oldChunkSize
+		*auditFromCache, *exportutil.ExportEnabled, *enableAuditTrigger = oldFromCache, oldExport, oldTrigger
+	})
+	*auditInterval, *auditMatchKindOnly, *auditChunkSize = 0, true, 1
+	*auditFromCache = false
+	*enableAuditTrigger = true
+	*apiCacheDir = t.TempDir()
+
+	f := newAuditScanFixture(t)
+	apiClient, constraint := f.client, f.constraint
+	mgr := &auditRecordingManager{Manager: f.mgr}
+	require.NoError(t, AddToManager(mgr, f.deps))
+	ctx := context.Background()
 	runCtx, cancel := context.WithCancel(ctx)
 	managerDone := make(chan error, 1)
 	go func() { managerDone <- mgr.Start(runCtx) }()
@@ -305,7 +543,6 @@ func TestAuditTriggerProductionFailures(t *testing.T) {
 	})
 	require.True(t, mgr.GetCache().WaitForCacheSync(runCtx))
 
-	constraintPath := "/apis/" + constraintsGV + "/" + versionedCRD.Spec.Names.Plural
 	trigger := &auditv1alpha1.AuditTrigger{
 		ObjectMeta: metav1.ObjectMeta{Name: auditv1alpha1.AuditTriggerName},
 		Spec:       auditv1alpha1.AuditTriggerSpec{AuditNonce: "initial"},
@@ -348,7 +585,7 @@ func TestAuditTriggerProductionFailures(t *testing.T) {
 			name: "constraint match listing unavailable",
 			code: http.StatusServiceUnavailable,
 			match: func(r *http.Request) bool {
-				return r.URL.Path == constraintPath && r.URL.Query().Get("limit") == ""
+				return r.URL.Path == f.constraintPath && r.URL.Query().Get("limit") == ""
 			},
 		},
 		{
@@ -382,15 +619,15 @@ func TestAuditTriggerProductionFailures(t *testing.T) {
 			mgr.audit.reporter.mu.RUnlock()
 			fault := &auditHTTPFault{match: tc.match, code: tc.code, count: 1}
 			if tc.name == "partial resource discovery" {
-				// Skip constraint discovery and REST mapping; fail both full-discovery attempts.
-				fault.skip, fault.count = 2, 2
+				fault.legacyDiscovery, fault.count = true, 2
+				fault.match = f.afterConstraintProbe(fault.match)
 			}
 			t.Cleanup(func() {
 				if t.Failed() {
-					t.Logf("last trigger status: %+v; matching requests: %d; injected faults: %d", trigger.Status, fault.seen.Load(), fault.hits.Load())
+					t.Logf("last trigger status: %+v; injected faults: %d", trigger.Status, fault.hits.Load())
 				}
 			})
-			faults.Store(fault)
+			f.faults.Store(fault)
 			if err := apiClient.Get(ctx, auditTriggerKey, trigger); apierrors.IsNotFound(err) {
 				require.NoError(t, apiClient.Create(ctx, trigger))
 			} else {
@@ -461,12 +698,11 @@ func (m *auditRecordingManager) Add(r manager.Runnable) error {
 }
 
 type auditHTTPFault struct {
-	match func(*http.Request) bool
-	code  int
-	skip  int32
-	count int32
-	seen  atomic.Int32
-	hits  atomic.Int32
+	match           func(*http.Request) bool
+	code            int
+	legacyDiscovery bool
+	count           int32
+	hits            atomic.Int32
 }
 
 type auditFaultTransport struct {
@@ -476,19 +712,19 @@ type auditFaultTransport struct {
 
 func (rt *auditFaultTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	fault := rt.fault.Load()
-	if fault != nil && fault.skip > 0 && (req.URL.Path == "/api" || req.URL.Path == "/apis") {
+	if fault != nil && fault.legacyDiscovery && (req.URL.Path == "/api" || req.URL.Path == groupDiscoveryPath) {
 		// Exercise the supported legacy partial-discovery path on servers with aggregated discovery.
 		req = req.Clone(req.Context())
 		req.Header.Set("Accept", "application/json")
 	}
-	if fault == nil || req.Method != http.MethodGet || !fault.match(req) ||
-		fault.seen.Add(1) <= fault.skip {
+	if fault == nil || req.Method != http.MethodGet || !fault.match(req) {
 		return rt.RoundTripper.RoundTrip(req)
 	}
 	if fault.hits.Add(1) == fault.count {
 		rt.fault.CompareAndSwap(fault, nil)
 	}
 	status := apierrors.NewServiceUnavailable("injected audit failure").ErrStatus
+	status.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "Status"}
 	switch fault.code {
 	case http.StatusForbidden:
 		status.Reason = metav1.StatusReasonForbidden

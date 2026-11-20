@@ -74,7 +74,7 @@ rules:
   - patch
   - update
   - watch
-{{- if and .Values.enableAuditTrigger (not .Values.disableAudit) }}
+{{- if and (eq (include "gatekeeper.auditTriggerFlag" .) "true") (not .Values.disableAudit) }}
 - apiGroups:
   - audit.gatekeeper.sh
   resources:
@@ -84,7 +84,7 @@ rules:
   - list
   - watch
 {{- end }}
-{{- if and .Values.enableAuditTrigger (not .Values.disableAudit) }}
+{{- if and (eq (include "gatekeeper.auditTriggerFlag" .) "true") (not .Values.disableAudit) }}
 - apiGroups:
   - audit.gatekeeper.sh
   resources:

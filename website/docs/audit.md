@@ -9,7 +9,8 @@ Audit performs periodic evaluations of existing resources against constraints, d
 
 On-demand audit is an alpha feature, disabled by default. Enable it on the audit process with
 `--enable-audit-trigger=true` (Helm: `enableAuditTrigger: true`) and install the `AuditTrigger` CRD
-and its RBAC permissions. The chart and standard manifests include the CRD; its presence alone
+and its RBAC permissions. Only set this flag or Helm value with an image that supports it.
+The chart and standard manifests include the CRD; its presence alone
 does not enable the feature. Static manifests include trigger permissions; Helm grants the explicit
 trigger permissions only when enabled.
 
@@ -17,6 +18,15 @@ With the feature disabled, Gatekeeper does not register the trigger controller o
 trigger status, and periodic audits do not depend on the trigger CRD. If the CRD is installed,
 requests can still be created but are not acknowledged or processed while disabled.
 Requests left pending are processed when the feature is enabled.
+
+With the feature disabled, periodic audits via API discovery support
+[scoped read permissions](operations.md#audit). If a group's resources cannot be discovered
+or the first LIST of a resource kind is forbidden, Gatekeeper logs the error and publishes
+results for the kinds it could audit. Status and violation totals cover **only those kinds**:
+for example, a wildcard constraint may report zero even if an unreadable kind violates it.
+If no eligible kind could be audited after such an error, or if another scan operation fails
+(for example, fetching a later page or a policy review returning an error), the previous
+statuses and violation totals are retained.
 
 Once enabled, an audit can be requested before the next configured audit interval by creating an `AuditTrigger`.
 Change `spec.auditNonce` to a fresh random UUID to request an audit as soon as possible.
@@ -55,7 +65,12 @@ Constraint-status writes reject audit timestamps older than the stored timestamp
 Success includes completion of constraint-status writes, but does not mean that no violations were
 found or that an external consumer uploaded the results.
 
-Discovery, resource listing, disk spooling, and policy evaluation failures fail the audit.
+Trigger readers need not have access to every audited namespace. On failure, `lastRun.message`
+contains a reference instead of resource names or underlying errors. An operator can search
+the audit pod logs for that reference to see the cause.
+
+With the feature enabled, discovery, resource listing, disk spooling, and errors returned by
+policy review fail both scheduled and on-demand audits, even without a pending trigger request.
 An incomplete scan does not publish new constraint statuses or violation totals; the previous
 results are retained. Constraint-status writes are not atomic across constraints: a failure while
 writing a complete scan's results can leave some constraints updated, but does not advance the
@@ -69,8 +84,11 @@ marker. Complete per-resource errors are logged rather than retained in the audi
 Multiple requests observed before an audit starts are coalesced into that audit. A request received
 during an audit requires a subsequent run; it is not silently skipped. A periodic audit can satisfy
 an already-observed request. Following a restart, requests without durable completion are rerun,
-so execution is at-least-once, not exactly-once. Starting an audit does not itself guarantee that
-all policy and resource caches have caught up.
+so execution is at-least-once, not exactly-once. If constraints exist and the restarted audit
+process is still ingesting its initial policy or synced data, a pending request keeps its
+generation and retries automatically. No new nonce is needed. This uses Gatekeeper's
+[startup readiness expectations](customize-startup.md); it is not a guarantee that subsequent
+policy or resource updates have reached every cache when an audit starts.
 
 A successful on-demand scan resets the periodic audit schedule even if its completion status
 cannot yet be persisted, so another audit will still start within the configured

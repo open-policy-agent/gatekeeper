@@ -3,11 +3,13 @@ package audit
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	auditv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/audit/v1alpha1"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -21,6 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
+
+const runningPhase = "Running"
 
 func TestNotifyAuditTriggerCoalesces(t *testing.T) {
 	am := &Manager{auditTriggerWake: make(chan struct{}, 1)}
@@ -51,7 +55,7 @@ func TestAuditTriggerRunCoalescesAndPreservesCompletion(t *testing.T) {
 		require.Equal(t, runs-1, resets)
 		if runs == 1 {
 			running := getAuditTrigger(t, c).Status.LastRun
-			require.Equal(t, "Running", running.Phase)
+			require.Equal(t, runningPhase, running.Phase)
 			require.Nil(t, running.CompletedAt)
 			require.EqualValues(t, 7, running.CoveredGeneration)
 			advanceAuditTrigger(t, c, 12)
@@ -139,7 +143,7 @@ func TestAuditTriggerPeriodicRunAndRecovery(t *testing.T) {
 	got := getAuditTrigger(t, c)
 	require.Zero(t, got.Status.SuccessfulGeneration)
 	require.Zero(t, got.Status.FailedGeneration)
-	require.Equal(t, "Running", got.Status.LastRun.Phase)
+	require.Equal(t, runningPhase, got.Status.LastRun.Phase)
 
 	runs := 0
 	recovered := newAuditTriggerRunner(c, func(context.Context) error {
@@ -307,6 +311,70 @@ func TestAuditTriggerPeriodicRunWithoutSingleton(t *testing.T) {
 	require.Equal(t, 1, runs)
 }
 
+func TestAuditTriggerInitialReadTimeout(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		onDemand bool
+		wantRuns int
+	}{
+		{name: "scheduled fallback", wantRuns: 1},
+		{name: "manual request stays pending", onDemand: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newAuditTriggerClient(t, newAuditTrigger(7))
+			runs := 0
+			runner := newAuditTriggerRunner(c, func(ctx context.Context) error {
+				runs++
+				require.NoError(t, ctx.Err())
+				_, bounded := ctx.Deadline()
+				require.False(t, bounded, "do not impose the bookkeeping deadline on a scan")
+				return nil
+			})
+			runner.reader = interceptor.NewClient(c, interceptor.Funcs{
+				Get: func(ctx context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
+					deadline, ok := ctx.Deadline()
+					require.True(t, ok, "the current singleton must not block the scheduler indefinitely")
+					require.LessOrEqual(t, time.Until(deadline), 2*time.Second)
+					<-ctx.Done()
+					return ctx.Err()
+				},
+			})
+			require.ErrorIs(t, runner.run(t.Context(), tt.onDemand), context.DeadlineExceeded)
+			require.Equal(t, tt.wantRuns, runs)
+			request := getAuditTrigger(t, c)
+			require.Zero(t, request.Status.SuccessfulGeneration)
+			require.Zero(t, request.Status.FailedGeneration)
+			require.Nil(t, request.Status.LastRun)
+
+			// A later wake can cover the very same nonce after the read recovers.
+			runner.reader = c
+			require.NoError(t, runner.run(t.Context(), true))
+			require.EqualValues(t, 7, getAuditTrigger(t, c).Status.SuccessfulGeneration)
+			require.Equal(t, tt.wantRuns+1, runs)
+		})
+	}
+}
+
+func TestAuditTriggerFailureDiagnostic(t *testing.T) {
+	for _, onDemand := range []bool{false, true} {
+		c := newAuditTriggerClient(t, newAuditTrigger(7))
+		cause := errors.New("private fixture namespace: backend detail")
+		runner := newAuditTriggerRunner(c, func(context.Context) error { return cause })
+		err := runner.run(t.Context(), onDemand)
+		require.ErrorIs(t, err, cause)
+		status := getAuditTrigger(t, c).Status
+		require.EqualValues(t, 7, status.FailedGeneration)
+		require.Zero(t, status.SuccessfulGeneration)
+		require.Equal(t, "AuditFailed", status.LastRun.Reason)
+		require.NotContains(t, status.LastRun.Message, cause.Error())
+		ref, ok := strings.CutPrefix(status.LastRun.Message, "The audit failed; see audit logs for reference ")
+		require.True(t, ok)
+		_, parseErr := uuid.Parse(ref)
+		require.NoError(t, parseErr)
+		require.ErrorContains(t, err, ref, "operator logs and public status must reference the same failure")
+	}
+}
+
 func TestAuditTriggerStatusFailureDoesNotBlockPeriodicScans(t *testing.T) {
 	c := newAuditTriggerClient(t, newAuditTrigger(7))
 	reject := true
@@ -344,7 +412,7 @@ func TestAuditTriggerCompletionAfterStartWriteFailure(t *testing.T) {
 	c := newAuditTriggerClient(t, newAuditTrigger(7))
 	wrapped := interceptor.NewClient(c, interceptor.Funcs{
 		SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-			if trigger, ok := obj.(*auditv1alpha1.AuditTrigger); ok && trigger.Status.LastRun.Phase == "Running" {
+			if trigger, ok := obj.(*auditv1alpha1.AuditTrigger); ok && trigger.Status.LastRun.Phase == runningPhase {
 				return apierrors.NewForbidden(schema.GroupResource{Resource: "audittriggers/status"}, obj.GetName(), errors.New("denied"))
 			}
 			return c.SubResource(name).Update(ctx, obj, opts...)
@@ -399,6 +467,59 @@ func TestPeriodicAuditFailureDoesNotScheduleRetry(t *testing.T) {
 	require.Never(t, func() bool { return reads.Load() != count }, 1500*time.Millisecond, 10*time.Millisecond)
 }
 
+// Even if the first hint is a periodic tick and the Running write wakes the
+// controller, a cold request should retry only on backoff, not on its own writes.
+func TestColdPendingPeriodicAuditBackoff(t *testing.T) {
+	am := &Manager{stopper: make(chan struct{}), auditTriggerWake: make(chan struct{}, 1)}
+	c := newAuditTriggerClient(t, newAuditTrigger(7))
+	var starts, attempts, resets atomic.Int32
+	wrapped := interceptor.NewClient(c, interceptor.Funcs{
+		SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+			err := c.SubResource(name).Update(ctx, obj, opts...)
+			if trigger, ok := obj.(*auditv1alpha1.AuditTrigger); ok && err == nil && trigger.Status.LastRun.Phase == runningPhase {
+				starts.Add(1)
+				am.notifyAuditTrigger()
+			}
+			return err
+		},
+	})
+	var ready atomic.Bool
+	runner := newAuditTriggerRunner(wrapped, func(context.Context) error {
+		attempts.Add(1)
+		if !ready.Load() {
+			return errAwaitingInitialData
+		}
+		return nil
+	})
+	runner.resetTicker = func() { resets.Add(1) }
+	timerClock := clocktesting.NewFakeClock(time.Now())
+	ticks := make(chan time.Time, 1)
+	ctx, cancel := context.WithCancel(t.Context())
+	go am.runAuditLoop(ctx, ticks, runner, timerClock)
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-am.stopper:
+		case <-time.After(5 * time.Second):
+			t.Error("audit loop did not stop")
+		}
+	})
+	ticks <- time.Now()
+	require.Eventually(t, func() bool { return attempts.Load() >= 2 && timerClock.HasWaiters() }, time.Second, time.Millisecond)
+	require.Never(t, func() bool { return attempts.Load() > 2 }, 50*time.Millisecond, time.Millisecond)
+	require.EqualValues(t, 1, starts.Load())
+	require.Zero(t, resets.Load())
+	status := getAuditTrigger(t, c).Status
+	require.Zero(t, status.SuccessfulGeneration)
+	require.Zero(t, status.FailedGeneration)
+	require.Nil(t, status.LastRun.CompletedAt)
+	ready.Store(true)
+	timerClock.Step(3 * time.Second)
+	require.Eventually(t, func() bool { return getAuditTrigger(t, c).Status.SuccessfulGeneration == 7 }, time.Second, time.Millisecond)
+	require.EqualValues(t, 3, attempts.Load())
+	require.EqualValues(t, 1, resets.Load())
+}
+
 func TestPeriodicAuditRetriesCompletionWithoutRescanning(t *testing.T) {
 	for _, auditErr := range []error{nil, errors.New("audit failed")} {
 		name := "success"
@@ -413,7 +534,7 @@ func TestPeriodicAuditRetriesCompletionWithoutRescanning(t *testing.T) {
 			reject.Store(true)
 			wrapped := interceptor.NewClient(c, interceptor.Funcs{
 				SubResourceUpdate: func(ctx context.Context, c client.Client, name string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-					if trigger, ok := obj.(*auditv1alpha1.AuditTrigger); ok && trigger.Status.LastRun.Phase != "Running" && reject.Swap(false) {
+					if trigger, ok := obj.(*auditv1alpha1.AuditTrigger); ok && trigger.Status.LastRun.Phase != runningPhase && reject.Swap(false) {
 						return apierrors.NewForbidden(schema.GroupResource{Resource: "audittriggers/status"}, obj.GetName(), errors.New("denied"))
 					}
 					return c.SubResource(name).Update(ctx, obj, opts...)
@@ -439,7 +560,7 @@ func TestPeriodicAuditRetriesCompletionWithoutRescanning(t *testing.T) {
 			})
 			ticks <- time.Now()
 			require.Eventually(t, timerClock.HasWaiters, 5*time.Second, time.Millisecond)
-			require.Equal(t, "Running", getAuditTrigger(t, c).Status.LastRun.Phase)
+			require.Equal(t, runningPhase, getAuditTrigger(t, c).Status.LastRun.Phase)
 			timerClock.Step(1100 * time.Millisecond)
 			require.Eventually(t, func() bool {
 				status := getAuditTrigger(t, c).Status

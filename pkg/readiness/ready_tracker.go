@@ -268,6 +268,26 @@ func (t *Tracker) Satisfied() bool {
 		log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "assignImage")
 	}
 
+	if !t.validationSatisfied() {
+		return false
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.satisfied = true
+	return true
+}
+
+// SatisfiedForAudit checks startup expectations used by policy evaluation.
+// Mutators can affect an audit through expansion, but not otherwise.
+func (t *Tracker) SatisfiedForAudit() bool {
+	if t.expansionEnabled {
+		return t.Satisfied()
+	}
+	return t.validationSatisfied()
+}
+
+func (t *Tracker) validationSatisfied() bool {
 	if t.externalDataEnabled {
 		if !t.externalDataProvider.Satisfied() {
 			return false
@@ -315,9 +335,6 @@ func (t *Tracker) Satisfied() bool {
 	}
 	log.V(logging.DebugLevel).Info("all expectations satisfied", "tracker", "data")
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.satisfied = true
 	return true
 }
 

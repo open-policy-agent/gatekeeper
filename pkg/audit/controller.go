@@ -25,12 +25,13 @@ import (
 )
 
 type Dependencies struct {
-	Client          *constraintclient.Client
-	ProcessExcluder *process.Excluder
-	CacheLister     *CacheLister
-	ExpansionSystem *expansion.System
-	ExportSystem    *export.System
-	GetPod          func(context.Context) (*corev1.Pod, error)
+	Client           *constraintclient.Client
+	InitialDataReady func() bool
+	ProcessExcluder  *process.Excluder
+	CacheLister      *CacheLister
+	ExpansionSystem  *expansion.System
+	ExportSystem     *export.System
+	GetPod           func(context.Context) (*corev1.Pod, error)
 }
 
 // AddToManager adds audit manager to the Manager.

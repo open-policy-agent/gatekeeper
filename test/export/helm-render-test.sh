@@ -84,7 +84,27 @@ check_audit_trigger() {
 check_audit_trigger "audit trigger defaults" omitted no
 check_audit_trigger "audit trigger false"    false   no  --set enableAuditTrigger=false
 check_audit_trigger "audit trigger true"     true    yes --set enableAuditTrigger=true
+check_audit_trigger "audit trigger string false" false no --set-string enableAuditTrigger=false
+check_audit_trigger "audit trigger string zero" false no --set-string enableAuditTrigger=0
+check_audit_trigger "audit trigger string true" true yes --set-string enableAuditTrigger=true
+check_audit_trigger "audit trigger null" omitted no --set enableAuditTrigger=null
+check_audit_trigger "audit trigger empty string" omitted no --set-string enableAuditTrigger=
 check_audit_trigger "audit disabled"         omitted no  --set enableAuditTrigger=true --set disableAudit=true
+# The staged static Deployment can pin an older binary that does not know this flag.
+yq -o=json -I=0 '.' "${ROOT}/manifest_staging/deploy/gatekeeper.yaml" |
+  jq -se '[.[] | select(.kind=="Deployment" and .metadata.name=="gatekeeper-audit") |
+    .spec.template.spec.containers[] | select(.name=="manager")] |
+    length==1 and all(.[0].args[]; startswith("--enable-audit-trigger") | not)' >/dev/null
+echo "PASS: default static audit deployment omits the trigger flag"
+if output="$("${HELM}" template gatekeeper "${CHART}" --set-string enableAuditTrigger=invalid 2>&1)"; then
+  echo "FAIL: invalid audit trigger value accepted"
+  failures=$((failures + 1))
+elif [[ "${output}" == *"enableAuditTrigger must be a boolean"* ]]; then
+  echo "PASS: invalid audit trigger value rejected"
+else
+  echo "FAIL: unexpected invalid audit trigger render error: ${output}"
+  failures=$((failures + 1))
+fi
 
 #     name                                  flag     volume driver sidecar args
 check "defaults"                            omitted  no     none   no
