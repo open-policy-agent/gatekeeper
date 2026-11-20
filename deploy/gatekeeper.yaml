@@ -34,7 +34,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assign.mutations.gatekeeper.sh
@@ -74,11 +74,11 @@ spec:
                 type: string
             type: object
           spec:
-            description: AssignSpec defines the desired state of Assign.
+            description: spec defines the desired state of Assign.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -118,12 +118,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -305,19 +305,20 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -325,13 +326,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -339,18 +340,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -361,6 +362,9 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
+                    description: |-
+                      pathTests are a series of existence tests that can be checked
+                      before a mutation is applied.
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -375,38 +379,49 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: AssignStatus defines the observed state of Assign.
+            description: status is the observed state of Assign.
             properties:
               byPod:
+                description: byPod lists the observed status of this Assign for each
+                  pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -414,17 +429,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -459,11 +482,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignSpec defines the desired state of Assign.
+            description: spec defines the desired state of Assign.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -503,12 +526,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -690,19 +713,20 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -710,13 +734,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -724,18 +748,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -746,6 +770,9 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
+                    description: |-
+                      pathTests are a series of existence tests that can be checked
+                      before a mutation is applied.
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -760,38 +787,49 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: AssignStatus defines the observed state of Assign.
+            description: status is the observed state of Assign.
             properties:
               byPod:
+                description: byPod lists the observed status of this Assign for each
+                  pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -799,17 +837,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -844,11 +890,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignSpec defines the desired state of Assign.
+            description: spec defines the desired state of Assign.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -888,12 +934,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main]`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -1075,19 +1121,20 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -1095,13 +1142,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -1109,18 +1156,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -1131,6 +1178,9 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                   pathTests:
+                    description: |-
+                      pathTests are a series of existence tests that can be checked
+                      before a mutation is applied.
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -1145,38 +1195,49 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: AssignStatus defines the observed state of Assign.
+            description: status is the observed state of Assign.
             properties:
               byPod:
+                description: byPod lists the observed status of this Assign for each
+                  pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -1184,17 +1245,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -1211,7 +1280,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assignimage.mutations.gatekeeper.sh
@@ -1251,11 +1320,11 @@ spec:
                 type: string
             type: object
           spec:
-            description: AssignImageSpec defines the desired state of AssignImage.
+            description: spec defines the desired state of AssignImage.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -1295,12 +1364,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main].image`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -1482,23 +1551,25 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   assignDomain:
                     description: |-
-                      AssignDomain sets the domain component on an image string. The trailing
+                      assignDomain sets the domain component on an image string. The trailing
                       slash should not be included.
                     type: string
                   assignPath:
-                    description: AssignPath sets the domain component on an image
-                      string.
+                    description: assignPath sets the path component on an image string.
                     type: string
                   assignTag:
                     description: |-
-                      AssignImage sets the image component on an image string. It must start
-                      with a `:` or `@`.
+                      assignTag sets the tag or digest component on an image string. It must
+                      start with a `:` or `@`.
                     type: string
                   pathTests:
+                    description: |-
+                      pathTests are a series of existence tests that can be checked
+                      before a mutation is applied.
                     items:
                       description: |-
                         PathTest allows the user to customize how the mutation works if parent
@@ -1513,38 +1584,49 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: AssignImageStatus defines the observed state of AssignImage.
+            description: status is the observed state of AssignImage.
             properties:
               byPod:
+                description: byPod lists the observed status of this AssignImage for
+                  each pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -1552,17 +1634,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -1579,7 +1669,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: assignmetadata.mutations.gatekeeper.sh
@@ -1619,12 +1709,17 @@ spec:
                 type: string
             type: object
           spec:
-            description: AssignMetadataSpec defines the desired state of AssignMetadata.
+            description: spec defines the desired state of AssignMetadata.
             properties:
               location:
+                description: 'location describes the path to be mutated, for example:
+                  `metadata.labels.foo`.'
                 type: string
               match:
-                description: Match selects which objects are in scope.
+                description: |-
+                  match allows the user to limit which resources get mutated.
+                  Individual match criteria are AND-ed together. An undefined
+                  match criteria matches everything.
                 properties:
                   excludedNamespaces:
                     description: |-
@@ -1804,18 +1899,20 @@ spec:
                     type: string
                 type: object
               parameters:
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -1823,13 +1920,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -1837,18 +1934,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -1861,28 +1958,33 @@ spec:
                 type: object
             type: object
           status:
-            description: AssignMetadataStatus defines the observed state of AssignMetadata.
+            description: status is the observed state of AssignMetadata.
             properties:
               byPod:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
+                description: byPod lists the observed status of this AssignMetadata
+                  for each pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -1890,17 +1992,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -1935,12 +2045,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignMetadataSpec defines the desired state of AssignMetadata.
+            description: spec defines the desired state of AssignMetadata.
             properties:
               location:
+                description: 'location describes the path to be mutated, for example:
+                  `metadata.labels.foo`.'
                 type: string
               match:
-                description: Match selects which objects are in scope.
+                description: |-
+                  match allows the user to limit which resources get mutated.
+                  Individual match criteria are AND-ed together. An undefined
+                  match criteria matches everything.
                 properties:
                   excludedNamespaces:
                     description: |-
@@ -2120,18 +2235,20 @@ spec:
                     type: string
                 type: object
               parameters:
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -2139,13 +2256,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -2153,18 +2270,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -2177,28 +2294,33 @@ spec:
                 type: object
             type: object
           status:
-            description: AssignMetadataStatus defines the observed state of AssignMetadata.
+            description: status is the observed state of AssignMetadata.
             properties:
               byPod:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
+                description: byPod lists the observed status of this AssignMetadata
+                  for each pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -2206,17 +2328,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -2251,12 +2381,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: AssignMetadataSpec defines the desired state of AssignMetadata.
+            description: spec defines the desired state of AssignMetadata.
             properties:
               location:
+                description: 'location describes the path to be mutated, for example:
+                  `metadata.labels.foo`.'
                 type: string
               match:
-                description: Match selects which objects are in scope.
+                description: |-
+                  match allows the user to limit which resources get mutated.
+                  Individual match criteria are AND-ed together. An undefined
+                  match criteria matches everything.
                 properties:
                   excludedNamespaces:
                     description: |-
@@ -2436,18 +2571,20 @@ spec:
                     type: string
                 type: object
               parameters:
+                description: parameters define the behavior of the mutator.
                 properties:
                   assign:
-                    description: Assign.value holds the value to be assigned
+                    description: assign holds the value to be assigned via its `value`
+                      field.
                     properties:
                       externalData:
-                        description: ExternalData describes the external data provider
+                        description: externalData describes the external data provider
                           to be used for mutation.
                         properties:
                           dataSource:
                             default: ValueAtLocation
                             description: |-
-                              DataSource specifies where to extract the data that will be sent
+                              dataSource specifies where to extract the data that will be sent
                               to the external data provider as parameters.
                             enum:
                             - ValueAtLocation
@@ -2455,13 +2592,13 @@ spec:
                             type: string
                           default:
                             description: |-
-                              Default specifies the default value to use when the external data
+                              default specifies the default value to use when the external data
                               provider returns an error and the failure policy is set to "UseDefault".
                             type: string
                           failurePolicy:
                             default: Fail
                             description: |-
-                              FailurePolicy specifies the policy to apply when the external data
+                              failurePolicy specifies the policy to apply when the external data
                               provider returns an error.
                             enum:
                             - UseDefault
@@ -2469,18 +2606,18 @@ spec:
                             - Fail
                             type: string
                           provider:
-                            description: Provider is the name of the external data
+                            description: provider is the name of the external data
                               provider.
                             type: string
                         required:
                         - provider
                         type: object
                       fromMetadata:
-                        description: FromMetadata assigns a value from the specified
+                        description: fromMetadata assigns a value from the specified
                           metadata field.
                         properties:
                           field:
-                            description: Field specifies which metadata field provides
+                            description: field specifies which metadata field provides
                               the assigned value. Valid fields are `namespace` and
                               `name`.
                             type: string
@@ -2493,28 +2630,33 @@ spec:
                 type: object
             type: object
           status:
-            description: AssignMetadataStatus defines the observed state of AssignMetadata.
+            description: status is the observed state of AssignMetadata.
             properties:
               byPod:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
+                description: byPod lists the observed status of this AssignMetadata
+                  for each pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -2522,17 +2664,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -2549,7 +2699,150 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: audittriggers.audit.gatekeeper.sh
+spec:
+  group: audit.gatekeeper.sh
+  names:
+    kind: AuditTrigger
+    listKind: AuditTriggerList
+    plural: audittriggers
+    singular: audittrigger
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.acknowledgedGeneration
+      name: Acknowledged
+      type: integer
+    - jsonPath: .status.successfulGeneration
+      name: Succeeded
+      type: integer
+    - jsonPath: .status.failedGeneration
+      name: Failed
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AuditTrigger requests an audit as soon as possible.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
+            type: object
+          spec:
+            description: spec requests an audit by changing its nonce.
+            properties:
+              auditNonce:
+                description: |-
+                  auditNonce requests an audit as soon as possible when changed. It is a
+                  change token, not an execution ID; use metadata.generation to track completion.
+                maxLength: 128
+                minLength: 1
+                type: string
+            required:
+            - auditNonce
+            type: object
+          status:
+            description: status reports generation watermarks and the most recently
+              reported execution.
+            properties:
+              acknowledgedGeneration:
+                description: acknowledgedGeneration is the highest generation accepted
+                  by Gatekeeper.
+                format: int64
+                minimum: 0
+                type: integer
+              failedGeneration:
+                description: failedGeneration is the highest generation covered by
+                  a failed audit.
+                format: int64
+                minimum: 0
+                type: integer
+              lastRun:
+                description: lastRun describes the most recently reported execution
+                  and is not authoritative for request completion.
+                properties:
+                  completedAt:
+                    description: completedAt is the time the audit run finished, if
+                      a terminal result was reported.
+                    format: date-time
+                    type: string
+                  coveredGeneration:
+                    description: coveredGeneration is frozen when the run starts.
+                      Later requests need another run.
+                    format: int64
+                    type: integer
+                  message:
+                    description: message is a human-readable explanation of the reported
+                      state.
+                    type: string
+                  phase:
+                    description: phase is the reported execution state; Running does
+                      not guarantee that the executing pod is still alive.
+                    enum:
+                    - Running
+                    - Succeeded
+                    - Failed
+                    - Unknown
+                    type: string
+                  reason:
+                    description: reason is a machine-readable explanation of the reported
+                      state.
+                    type: string
+                  startedAt:
+                    description: startedAt is the time the audit run started.
+                    format: date-time
+                    type: string
+                required:
+                - coveredGeneration
+                - message
+                - phase
+                - reason
+                - startedAt
+                type: object
+              successfulGeneration:
+                description: |-
+                  successfulGeneration is the highest generation covered by a successful audit.
+                  Check this before FailedGeneration; a later failure does not invalidate success.
+                format: int64
+                minimum: 0
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: AuditTrigger must be named audit-trigger
+          rule: self.metadata.name == 'audit-trigger'
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: configpodstatuses.status.gatekeeper.sh
@@ -2584,30 +2877,45 @@ spec:
           metadata:
             type: object
           status:
+            description: status is the observed state of Config for this pod.
             properties:
               configUID:
                 description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
+                  configUID is the UID of the Config this status reports on. It is used to
+                  ignore statuses that belong to a previous Config with the same name, for
+                  example after the Config was deleted and recreated.
                 type: string
               errors:
+                description: errors lists any errors encountered while processing
+                  the Config.
                 items:
                   properties:
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     type:
+                      description: |-
+                        type indicates a specific class of error for use by controller code. If not
+                        present, the error should be treated as not matching any known type.
                       type: string
                   required:
                   - message
                   type: object
                 type: array
               id:
+                description: id is the name of the pod that generated this status.
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the Config that was last processed by
+                  this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
@@ -2620,7 +2928,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
@@ -2656,13 +2964,15 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConfigSpec defines the desired state of Config.
+            description: spec defines the desired state of Config.
             properties:
               match:
-                description: Configuration for namespace exclusion
+                description: match is the configuration for namespace exclusion
                 items:
                   properties:
                     excludedNamespaces:
+                      description: excludedNamespaces lists the namespaces excluded
+                        from the listed processes.
                       items:
                         description: |-
                           A string that supports globbing at its front and end. Ex: "kube-*" will match "kube-system" or
@@ -2672,92 +2982,122 @@ spec:
                         type: string
                       type: array
                     processes:
+                      description: processes lists the Gatekeeper processes this exclusion
+                        applies to.
                       items:
                         type: string
                       type: array
                   type: object
                 type: array
               readiness:
-                description: Configuration for readiness tracker
+                description: readiness is the configuration for readiness tracker
                 properties:
                   statsEnabled:
+                    description: statsEnabled enables reporting of readiness tracker
+                      statistics.
                     type: boolean
                 type: object
               sync:
-                description: Configuration for syncing k8s objects
+                description: sync is the configuration for syncing k8s objects
                 properties:
                   syncOnly:
-                    description: If non-empty, only entries on this list will be replicated
-                      into OPA
+                    description: |-
+                      syncOnly restricts replication into OPA to only the entries on this list,
+                      when non-empty
                     items:
                       properties:
                         group:
+                          description: group is the API group of the resource to sync.
                           type: string
                         kind:
+                          description: kind is the kind of the resource to sync.
                           type: string
                         version:
+                          description: version is the API version of the resource
+                            to sync.
                           type: string
                       type: object
                     type: array
                 type: object
               validation:
-                description: Configuration for validation
+                description: validation is the configuration for validation
                 properties:
                   traces:
-                    description: List of requests to trace. Both "user" and "kinds"
-                      must be specified
+                    description: traces is the list of requests to trace. Both "user"
+                      and "kind" must be specified
                     items:
                       properties:
                         dump:
-                          description: Also dump the state of OPA with the trace.
+                          description: dump also dumps the state of OPA with the trace.
                             Set to `All` to dump everything.
                           type: string
                         kind:
-                          description: Only trace requests of the following GroupVersionKind
+                          description: kind restricts tracing to requests of the following
+                            GroupVersionKind
                           properties:
                             group:
+                              description: group is the API group of the resource.
                               type: string
                             kind:
+                              description: kind is the kind of the resource.
                               type: string
                             version:
+                              description: version is the API version of the resource.
                               type: string
                           type: object
                         user:
-                          description: Only trace requests from the specified user
+                          description: user restricts tracing to requests from the
+                            specified user
                           type: string
                       type: object
                     type: array
                 type: object
             type: object
           status:
-            description: ConfigStatus defines the observed state of Config.
+            description: status is the observed state of Config.
             properties:
               byPod:
+                description: byPod lists the observed status of this Config for each
+                  pod.
                 items:
                   properties:
                     configUID:
                       description: |-
-                        UID is a type that holds unique ID values, including UUIDs.  Because we
-                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                        intent and helps make sure that UIDs and names do not get conflated.
+                        configUID is the UID of the Config this status reports on. It is used to
+                        ignore statuses that belong to a previous Config with the same name, for
+                        example after the Config was deleted and recreated.
                       type: string
                     errors:
+                      description: errors lists any errors encountered while processing
+                        the Config.
                       items:
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the Config that was last processed by
+                        this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -2774,7 +3114,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: connectionpodstatuses.status.gatekeeper.sh
@@ -2811,41 +3151,107 @@ spec:
           metadata:
             type: object
           status:
-            description: No spec field is defined here, as this is a status-only resource.
+            description: status is the observed state of the Connection for this pod.
             properties:
-              active:
-                description: Indicator for alive connection with at least one successful
-                  publish
-                type: boolean
-              connectionUID:
-                description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
-                type: string
-              errors:
+              connectionErrors:
+                description: connectionErrors contains errors from creating or updating
+                  the Connection.
                 items:
                   properties:
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     type:
+                      description: |-
+                        type indicates a specific class of error for use by controller code. If not
+                        present, the error should be treated as not matching any known type.
                       type: string
                   required:
                   - message
                   - type
                   type: object
+                maxItems: 500
                 type: array
+              connectionUID:
+                description: |-
+                  connectionUID is the UID of the Connection this status reports on. It is
+                  used to ignore statuses that belong to a previous Connection with the same
+                  name, for example after the Connection was deleted and recreated.
+                type: string
               id:
-                description: ID is the unique identifier for the pod that wrote the
+                description: id is the unique identifier for the pod that wrote the
                   status
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the Connection that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
+              publishStatuses:
+                description: publishStatuses reports publishing health independently
+                  for each source.
+                items:
+                  description: ConnectionPublishStatus reports publishing health for
+                    one producer.
+                  properties:
+                    active:
+                      description: |-
+                        active indicates that the source completed at least one publish in its
+                        latest reporting window.
+                      type: boolean
+                    errors:
+                      description: errors contains publish failures reported by this
+                        source.
+                      items:
+                        properties:
+                          message:
+                            description: message is a human-readable description of
+                              the error.
+                            type: string
+                          type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
+                            type: string
+                        required:
+                        - message
+                        - type
+                        type: object
+                      maxItems: 500
+                      type: array
+                    lastAttemptTime:
+                      description: lastAttemptTime is the most recent publish attempt
+                        represented by this status.
+                      format: date-time
+                      type: string
+                    lastSuccessTime:
+                      description: lastSuccessTime is the most recent successful publish
+                        by this source.
+                      format: date-time
+                      type: string
+                    source:
+                      description: source identifies the producer that owns this status.
+                      enum:
+                      - audit
+                      - webhook
+                      type: string
+                  required:
+                  - source
+                  type: object
+                maxItems: 2
+                type: array
+                x-kubernetes-list-map-keys:
+                - source
+                x-kubernetes-list-type: map
             type: object
         type: object
     served: true
@@ -2855,7 +3261,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: connections.connection.gatekeeper.sh
@@ -2889,61 +3295,295 @@ spec:
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
             type: object
           spec:
-            description: ConnectionSpec defines the desired state of Connection.
+            description: spec defines the desired state of Connection.
             properties:
               config:
+                description: config is the driver-specific configuration for this
+                  connection.
                 x-kubernetes-preserve-unknown-fields: true
               driver:
-                description: Driver is the name of one of the expected drivers i.e.
-                  dapr, disk
+                description: driver is the name of one of the expected drivers i.e.
+                  disk
                 type: string
             required:
             - config
             - driver
             type: object
           status:
-            description: ConnectionStatus defines the observed state of Connection.
+            description: status is the observed state of Connection.
             properties:
               byPod:
+                description: byPod lists the observed status of this Connection for
+                  each pod.
                 items:
                   description: ConnectionPodStatusStatus defines the observed state
                     of ConnectionPodStatus.
                   properties:
-                    active:
-                      description: Indicator for alive connection with at least one
-                        successful publish
-                      type: boolean
-                    connectionUID:
-                      description: |-
-                        UID is a type that holds unique ID values, including UUIDs.  Because we
-                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                        intent and helps make sure that UIDs and names do not get conflated.
-                      type: string
-                    errors:
+                    connectionErrors:
+                      description: connectionErrors contains errors from creating
+                        or updating the Connection.
                       items:
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message
                         - type
                         type: object
+                      maxItems: 500
                       type: array
+                    connectionUID:
+                      description: |-
+                        connectionUID is the UID of the Connection this status reports on. It is
+                        used to ignore statuses that belong to a previous Connection with the same
+                        name, for example after the Connection was deleted and recreated.
+                      type: string
                     id:
-                      description: ID is the unique identifier for the pod that wrote
+                      description: id is the unique identifier for the pod that wrote
                         the status
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the Connection that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
+                    publishStatuses:
+                      description: publishStatuses reports publishing health independently
+                        for each source.
+                      items:
+                        description: ConnectionPublishStatus reports publishing health
+                          for one producer.
+                        properties:
+                          active:
+                            description: |-
+                              active indicates that the source completed at least one publish in its
+                              latest reporting window.
+                            type: boolean
+                          errors:
+                            description: errors contains publish failures reported
+                              by this source.
+                            items:
+                              properties:
+                                message:
+                                  description: message is a human-readable description
+                                    of the error.
+                                  type: string
+                                type:
+                                  description: |-
+                                    type indicates a specific class of error for use by controller code. If not
+                                    present, the error should be treated as not matching any known type.
+                                  type: string
+                              required:
+                              - message
+                              - type
+                              type: object
+                            maxItems: 500
+                            type: array
+                          lastAttemptTime:
+                            description: lastAttemptTime is the most recent publish
+                              attempt represented by this status.
+                            format: date-time
+                            type: string
+                          lastSuccessTime:
+                            description: lastSuccessTime is the most recent successful
+                              publish by this source.
+                            format: date-time
+                            type: string
+                          source:
+                            description: source identifies the producer that owns
+                              this status.
+                            enum:
+                            - audit
+                            - webhook
+                            type: string
+                        required:
+                        - source
+                        type: object
+                      maxItems: 2
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - source
+                      x-kubernetes-list-type: map
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+  - name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: Connection is the Schema for the connections API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
+            type: object
+          spec:
+            description: spec defines the desired state of Connection.
+            properties:
+              config:
+                description: config is the driver-specific configuration for this
+                  connection.
+                x-kubernetes-preserve-unknown-fields: true
+              driver:
+                description: driver is the name of one of the expected drivers i.e.
+                  disk
+                type: string
+            required:
+            - config
+            - driver
+            type: object
+          status:
+            description: status is the observed state of Connection.
+            properties:
+              byPod:
+                description: byPod lists the observed status of this Connection for
+                  each pod.
+                items:
+                  description: ConnectionPodStatusStatus defines the observed state
+                    of ConnectionPodStatus.
+                  properties:
+                    connectionErrors:
+                      description: connectionErrors contains errors from creating
+                        or updating the Connection.
+                      items:
+                        properties:
+                          message:
+                            description: message is a human-readable description of
+                              the error.
+                            type: string
+                          type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
+                            type: string
+                        required:
+                        - message
+                        - type
+                        type: object
+                      maxItems: 500
+                      type: array
+                    connectionUID:
+                      description: |-
+                        connectionUID is the UID of the Connection this status reports on. It is
+                        used to ignore statuses that belong to a previous Connection with the same
+                        name, for example after the Connection was deleted and recreated.
+                      type: string
+                    id:
+                      description: id is the unique identifier for the pod that wrote
+                        the status
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the Connection that was last processed
+                        by this pod.
+                      format: int64
+                      type: integer
+                    operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
+                      items:
+                        type: string
+                      type: array
+                    publishStatuses:
+                      description: publishStatuses reports publishing health independently
+                        for each source.
+                      items:
+                        description: ConnectionPublishStatus reports publishing health
+                          for one producer.
+                        properties:
+                          active:
+                            description: |-
+                              active indicates that the source completed at least one publish in its
+                              latest reporting window.
+                            type: boolean
+                          errors:
+                            description: errors contains publish failures reported
+                              by this source.
+                            items:
+                              properties:
+                                message:
+                                  description: message is a human-readable description
+                                    of the error.
+                                  type: string
+                                type:
+                                  description: |-
+                                    type indicates a specific class of error for use by controller code. If not
+                                    present, the error should be treated as not matching any known type.
+                                  type: string
+                              required:
+                              - message
+                              - type
+                              type: object
+                            maxItems: 500
+                            type: array
+                          lastAttemptTime:
+                            description: lastAttemptTime is the most recent publish
+                              attempt represented by this status.
+                            format: date-time
+                            type: string
+                          lastSuccessTime:
+                            description: lastSuccessTime is the most recent successful
+                              publish by this source.
+                            format: date-time
+                            type: string
+                          source:
+                            description: source identifies the producer that owns
+                              this status.
+                            enum:
+                            - audit
+                            - webhook
+                            type: string
+                        required:
+                        - source
+                        type: object
+                      maxItems: 2
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - source
+                      x-kubernetes-list-type: map
                   type: object
                 type: array
             type: object
@@ -2957,7 +3597,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: constraintpodstatuses.status.gatekeeper.sh
@@ -2994,29 +3634,44 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus.
+            description: status is the observed state of the Constraint for this pod.
             properties:
               constraintUID:
                 description: |-
-                  Storing the constraint UID allows us to detect drift, such as
+                  constraintUID is the UID of the Constraint this status reports on. Storing
+                  the constraint UID allows us to detect drift, such as
                   when a constraint has been recreated after its CRD was deleted
                   out from under it, interrupting the watch
                 type: string
               enforced:
+                description: enforced indicates whether the Constraint is currently
+                  enforced on this pod.
                 type: boolean
               enforcementPointsStatus:
+                description: |-
+                  enforcementPointsStatus reports the enforcement status of the Constraint for
+                  each configured enforcement point.
                 items:
                   description: EnforcementPointStatus represents the status of a single
                     enforcement point.
                   properties:
                     enforcementPoint:
+                      description: enforcementPoint identifies the enforcement point
+                        this status applies to.
                       type: string
                     message:
+                      description: message provides additional detail about the enforcement
+                        point state.
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the Constraint that was last processed
+                        for this enforcement point.
                       format: int64
                       type: integer
                     state:
+                      description: state is the current enforcement state for this
+                        enforcement point.
                       type: string
                   required:
                   - enforcementPoint
@@ -3024,15 +3679,22 @@ spec:
                   type: object
                 type: array
               errors:
+                description: errors lists any errors encountered while adding the
+                  Constraint on this pod.
                 items:
                   description: Error represents a single error caught while adding
                     a constraint to engine.
                   properties:
                     code:
+                      description: code is a short identifier for the class of error.
                       type: string
                     location:
+                      description: location is the resource or component associated
+                        with the error.
                       type: string
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                   required:
                   - code
@@ -3040,11 +3702,18 @@ spec:
                   type: object
                 type: array
               id:
+                description: id is the name of the pod that generated this status.
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the Constraint that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
@@ -3057,7 +3726,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: constrainttemplatepodstatuses.status.gatekeeper.sh
@@ -3094,10 +3763,13 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintTemplatePodStatusStatus defines the observed state
-              of ConstraintTemplatePodStatus.
+            description: status is the observed state of the ConstraintTemplate for
+              this pod.
             properties:
               errors:
+                description: |-
+                  errors lists any errors encountered while creating the CRD for the
+                  ConstraintTemplate on this pod.
                 items:
                   description: CreateCRDError represents a single error caught during
                     parsing, compiling, etc.
@@ -3114,31 +3786,46 @@ spec:
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying
-                  this file'
+                description: id is the name of the pod that generated this status.
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the ConstraintTemplate that was last
+                  processed by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
               templateUID:
                 description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
+                  templateUID is the UID of the ConstraintTemplate this status reports on. It
+                  is used to ignore statuses that belong to a previous ConstraintTemplate with
+                  the same name, for example after it was deleted and recreated.
                 type: string
               vapGenerationStatus:
-                description: VAPGenerationStatus represents the status of VAP generation.
+                description: |-
+                  vapGenerationStatus reports the status of generating a ValidatingAdmissionPolicy
+                  for the ConstraintTemplate on this pod.
                 properties:
                   observedGeneration:
+                    description: |-
+                      observedGeneration is the generation of the ConstraintTemplate that was last
+                      processed for ValidatingAdmissionPolicy generation.
                     format: int64
                     type: integer
                   state:
+                    description: state is the current state of ValidatingAdmissionPolicy
+                      generation.
                     type: string
                   warning:
+                    description: |-
+                      warning contains a human-readable warning encountered while generating the
+                      ValidatingAdmissionPolicy, if any.
                     type: string
                 type: object
             type: object
@@ -3624,7 +4311,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: expansiontemplate.expansion.gatekeeper.sh
@@ -3664,11 +4351,11 @@ spec:
                 type: string
             type: object
           spec:
-            description: ExpansionTemplateSpec defines the desired state of ExpansionTemplate.
+            description: spec defines the desired state of ExpansionTemplate.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds of generator resources
+                  applyTo lists the specific groups, versions and kinds of generator resources
                   which will be expanded.
                 items:
                   description: |-
@@ -3691,64 +4378,81 @@ spec:
                 type: array
               enforcementAction:
                 description: |-
-                  EnforcementAction specifies the enforcement action to be used for resources
+                  enforcementAction specifies the enforcement action to be used for resources
                   matching the ExpansionTemplate. Specifying an empty value will use the
                   enforcement action specified by the Constraint in violation.
                 type: string
               generatedGVK:
                 description: |-
-                  GeneratedGVK specifies the GVK of the resources which the generator
+                  generatedGVK specifies the GVK of the resources which the generator
                   resource creates.
                 properties:
                   group:
+                    description: group is the API group of the generated resource.
                     type: string
                   kind:
+                    description: kind is the kind of the generated resource.
                     type: string
                   version:
+                    description: version is the API version of the generated resource.
                     type: string
                 type: object
               templateSource:
                 description: |-
-                  TemplateSource specifies the source field on the generator resource to
+                  templateSource specifies the source field on the generator resource to
                   use as the base for expanded resource. For Pod-creating generators, this
                   is usually spec.template
                 type: string
             type: object
           status:
-            description: ExpansionTemplateStatus defines the observed state of ExpansionTemplate.
+            description: status is the observed state of ExpansionTemplate.
             properties:
               byPod:
+                description: byPod lists the observed status of this ExpansionTemplate
+                  for each pod.
                 items:
                   description: ExpansionTemplatePodStatusStatus defines the observed
                     state of ExpansionTemplatePodStatus.
                   properties:
                     errors:
+                      description: errors lists any errors encountered while processing
+                        the ExpansionTemplate.
                       items:
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message
                         type: object
                       type: array
                     id:
-                      description: 'Important: Run "make" to regenerate code after
-                        modifying this file'
+                      description: id is the name of the pod that generated this status.
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the ExpansionTemplate that was last
+                        processed by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
                     templateUID:
                       description: |-
-                        UID is a type that holds unique ID values, including UUIDs.  Because we
-                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                        intent and helps make sure that UIDs and names do not get conflated.
+                        templateUID is the UID of the ExpansionTemplate this status reports on. It is
+                        used to ignore statuses that belong to a previous ExpansionTemplate with the
+                        same name, for example after it was deleted and recreated.
                       type: string
                   type: object
                 type: array
@@ -3781,11 +4485,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: ExpansionTemplateSpec defines the desired state of ExpansionTemplate.
+            description: spec defines the desired state of ExpansionTemplate.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds of generator resources
+                  applyTo lists the specific groups, versions and kinds of generator resources
                   which will be expanded.
                 items:
                   description: |-
@@ -3808,64 +4512,81 @@ spec:
                 type: array
               enforcementAction:
                 description: |-
-                  EnforcementAction specifies the enforcement action to be used for resources
+                  enforcementAction specifies the enforcement action to be used for resources
                   matching the ExpansionTemplate. Specifying an empty value will use the
                   enforcement action specified by the Constraint in violation.
                 type: string
               generatedGVK:
                 description: |-
-                  GeneratedGVK specifies the GVK of the resources which the generator
+                  generatedGVK specifies the GVK of the resources which the generator
                   resource creates.
                 properties:
                   group:
+                    description: group is the API group of the generated resource.
                     type: string
                   kind:
+                    description: kind is the kind of the generated resource.
                     type: string
                   version:
+                    description: version is the API version of the generated resource.
                     type: string
                 type: object
               templateSource:
                 description: |-
-                  TemplateSource specifies the source field on the generator resource to
+                  templateSource specifies the source field on the generator resource to
                   use as the base for expanded resource. For Pod-creating generators, this
                   is usually spec.template
                 type: string
             type: object
           status:
-            description: ExpansionTemplateStatus defines the observed state of ExpansionTemplate.
+            description: status is the observed state of ExpansionTemplate.
             properties:
               byPod:
+                description: byPod lists the observed status of this ExpansionTemplate
+                  for each pod.
                 items:
                   description: ExpansionTemplatePodStatusStatus defines the observed
                     state of ExpansionTemplatePodStatus.
                   properties:
                     errors:
+                      description: errors lists any errors encountered while processing
+                        the ExpansionTemplate.
                       items:
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
+                            description: |-
+                              type indicates a specific class of error for use by controller code. If not
+                              present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message
                         type: object
                       type: array
                     id:
-                      description: 'Important: Run "make" to regenerate code after
-                        modifying this file'
+                      description: id is the name of the pod that generated this status.
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the ExpansionTemplate that was last
+                        processed by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
                     templateUID:
                       description: |-
-                        UID is a type that holds unique ID values, including UUIDs.  Because we
-                        don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                        intent and helps make sure that UIDs and names do not get conflated.
+                        templateUID is the UID of the ExpansionTemplate this status reports on. It is
+                        used to ignore statuses that belong to a previous ExpansionTemplate with the
+                        same name, for example after it was deleted and recreated.
                       type: string
                   type: object
                 type: array
@@ -3880,7 +4601,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: expansiontemplatepodstatuses.status.gatekeeper.sh
@@ -3917,36 +4638,48 @@ spec:
           metadata:
             type: object
           status:
-            description: ExpansionTemplatePodStatusStatus defines the observed state
-              of ExpansionTemplatePodStatus.
+            description: status is the observed state of the ExpansionTemplate for
+              this pod.
             properties:
               errors:
+                description: errors lists any errors encountered while processing
+                  the ExpansionTemplate.
                 items:
                   properties:
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     type:
+                      description: |-
+                        type indicates a specific class of error for use by controller code. If not
+                        present, the error should be treated as not matching any known type.
                       type: string
                   required:
                   - message
                   type: object
                 type: array
               id:
-                description: 'Important: Run "make" to regenerate code after modifying
-                  this file'
+                description: id is the name of the pod that generated this status.
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the ExpansionTemplate that was last
+                  processed by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
               templateUID:
                 description: |-
-                  UID is a type that holds unique ID values, including UUIDs.  Because we
-                  don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-                  intent and helps make sure that UIDs and names do not get conflated.
+                  templateUID is the UID of the ExpansionTemplate this status reports on. It is
+                  used to ignore statuses that belong to a previous ExpansionTemplate with the
+                  same name, for example after it was deleted and recreated.
                 type: string
             type: object
         type: object
@@ -3957,7 +4690,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: modifyset.mutations.gatekeeper.sh
@@ -3999,11 +4732,11 @@ spec:
                 type: string
             type: object
           spec:
-            description: ModifySetSpec defines the desired state of ModifySet.
+            description: spec defines the desired state of ModifySet.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -4043,12 +4776,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -4230,11 +4963,11 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged
+                    description: operation describes whether values should be merged
                       in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
@@ -4242,7 +4975,7 @@ spec:
                     type: string
                   pathTests:
                     description: |-
-                      PathTests are a series of existence tests that can be checked
+                      pathTests are a series of existence tests that can be checked
                       before a mutation is applied
                     items:
                       description: |-
@@ -4258,13 +4991,16 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
@@ -4276,25 +5012,33 @@ spec:
                 type: object
             type: object
           status:
-            description: ModifySetStatus defines the observed state of ModifySet.
+            description: status is the observed state of ModifySet.
             properties:
               byPod:
+                description: byPod lists the observed status of this ModifySet for
+                  each pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -4302,17 +5046,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -4349,11 +5101,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: ModifySetSpec defines the desired state of ModifySet.
+            description: spec defines the desired state of ModifySet.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -4393,12 +5145,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -4580,11 +5332,11 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged
+                    description: operation describes whether values should be merged
                       in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
@@ -4592,7 +5344,7 @@ spec:
                     type: string
                   pathTests:
                     description: |-
-                      PathTests are a series of existence tests that can be checked
+                      pathTests are a series of existence tests that can be checked
                       before a mutation is applied
                     items:
                       description: |-
@@ -4608,13 +5360,16 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
@@ -4626,25 +5381,33 @@ spec:
                 type: object
             type: object
           status:
-            description: ModifySetStatus defines the observed state of ModifySet.
+            description: status is the observed state of ModifySet.
             properties:
               byPod:
+                description: byPod lists the observed status of this ModifySet for
+                  each pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -4652,17 +5415,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -4699,11 +5470,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: ModifySetSpec defines the desired state of ModifySet.
+            description: spec defines the desired state of ModifySet.
             properties:
               applyTo:
                 description: |-
-                  ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+                  applyTo lists the specific groups, versions and kinds a mutation will be applied to.
                   This is necessary because every mutation implies part of an object schema and object
                   schemas are associated with specific GVKs.
                 items:
@@ -4743,12 +5514,12 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example:
+                description: 'location describes the path to be mutated, for example:
                   `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: |-
-                  Match allows the user to limit which resources get mutated.
+                  match allows the user to limit which resources get mutated.
                   Individual match criteria are AND-ed together. An undefined
                   match criteria matches everything.
                 properties:
@@ -4930,11 +5701,11 @@ spec:
                     type: string
                 type: object
               parameters:
-                description: Parameters define the behavior of the mutator.
+                description: parameters define the behavior of the mutator.
                 properties:
                   operation:
                     default: merge
-                    description: Operation describes whether values should be merged
+                    description: operation describes whether values should be merged
                       in ("merge"), or pruned ("prune"). Default value is "merge"
                     enum:
                     - merge
@@ -4942,7 +5713,7 @@ spec:
                     type: string
                   pathTests:
                     description: |-
-                      PathTests are a series of existence tests that can be checked
+                      pathTests are a series of existence tests that can be checked
                       before a mutation is applied
                     items:
                       description: |-
@@ -4958,13 +5729,16 @@ spec:
                         * MustNotExist - the path must not exist or do not mutate.
                       properties:
                         condition:
-                          description: Condition describes whether the path either
-                            MustExist or MustNotExist in the original object
+                          description: |-
+                            condition describes whether the path either MustExist or MustNotExist
+                            in the original object.
                           enum:
                           - MustExist
                           - MustNotExist
                           type: string
                         subPath:
+                          description: subPath is the path, relative to `location`,
+                            that must satisfy `condition`.
                           type: string
                       type: object
                     type: array
@@ -4976,25 +5750,33 @@ spec:
                 type: object
             type: object
           status:
-            description: ModifySetStatus defines the observed state of ModifySet.
+            description: status is the observed state of ModifySet.
             properties:
               byPod:
+                description: byPod lists the observed status of this ModifySet for
+                  each pod.
                 items:
                   description: MutatorPodStatusStatus defines the observed state of
                     MutatorPodStatus.
                   properties:
                     enforced:
+                      description: enforced indicates whether the mutator is currently
+                        enforced on this pod.
                       type: boolean
                     errors:
+                      description: errors lists any errors encountered while adding
+                        the mutator on this pod.
                       items:
                         description: MutatorError represents a single error caught
                           while adding a mutator to a system.
                         properties:
                           message:
+                            description: message is a human-readable description of
+                              the error.
                             type: string
                           type:
                             description: |-
-                              Type indicates a specific class of error for use by controller code.
+                              type indicates a specific class of error for use by controller code.
                               If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
@@ -5002,17 +5784,25 @@ spec:
                         type: object
                       type: array
                     id:
+                      description: id is the name of the pod that generated this status.
                       type: string
                     mutatorUID:
                       description: |-
-                        Storing the mutator UID allows us to detect drift, such as
+                        mutatorUID is the UID of the mutator this status reports on. Storing the
+                        mutator UID allows us to detect drift, such as
                         when a mutator has been recreated after its CRD was deleted
                         out from under it, interrupting the watch
                       type: string
                     observedGeneration:
+                      description: |-
+                        observedGeneration is the generation of the mutator that was last processed
+                        by this pod.
                       format: int64
                       type: integer
                     operations:
+                      description: |-
+                        operations lists the Gatekeeper operations assigned to the pod that generated
+                        this status.
                       items:
                         type: string
                       type: array
@@ -5029,7 +5819,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: mutatorpodstatuses.status.gatekeeper.sh
@@ -5065,20 +5855,26 @@ spec:
           metadata:
             type: object
           status:
-            description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
+            description: status is the observed state of the mutator for this pod.
             properties:
               enforced:
+                description: enforced indicates whether the mutator is currently enforced
+                  on this pod.
                 type: boolean
               errors:
+                description: errors lists any errors encountered while adding the
+                  mutator on this pod.
                 items:
                   description: MutatorError represents a single error caught while
                     adding a mutator to a system.
                   properties:
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     type:
                       description: |-
-                        Type indicates a specific class of error for use by controller code.
+                        type indicates a specific class of error for use by controller code.
                         If not present, the error should be treated as not matching any known type.
                       type: string
                   required:
@@ -5086,17 +5882,25 @@ spec:
                   type: object
                 type: array
               id:
+                description: id is the name of the pod that generated this status.
                 type: string
               mutatorUID:
                 description: |-
-                  Storing the mutator UID allows us to detect drift, such as
+                  mutatorUID is the UID of the mutator this status reports on. Storing the
+                  mutator UID allows us to detect drift, such as
                   when a mutator has been recreated after its CRD was deleted
                   out from under it, interrupting the watch
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the mutator that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
@@ -5109,7 +5913,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: providerpodstatuses.status.gatekeeper.sh
@@ -5145,25 +5949,36 @@ spec:
           metadata:
             type: object
           status:
-            description: No spec field is defined here, as this is a status-only resource.
+            description: status is the observed state of the provider for this pod.
             properties:
               active:
+                description: |-
+                  active indicates whether the provider is currently active on this pod, that
+                  is, it was processed without errors.
                 type: boolean
               errors:
+                description: errors lists any errors encountered while managing the
+                  provider on this pod.
                 items:
                   description: ProviderError represents a single error caught while
                     managing providers.
                   properties:
                     errorTimestamp:
+                      description: errorTimestamp is the time at which the error occurred.
                       format: date-time
                       type: string
                     message:
+                      description: message is a human-readable description of the
+                        error.
                       type: string
                     retryable:
+                      description: |-
+                        retryable indicates whether the operation that produced this error can be
+                        retried.
                       type: boolean
                     type:
                       description: |-
-                        Type indicates a specific class of error for use by controller code.
+                        type indicates a specific class of error for use by controller code.
                         If not present, the error should be treated as not matching any known type.
                       type: string
                   required:
@@ -5174,23 +5989,37 @@ spec:
                   type: object
                 type: array
               id:
+                description: id is the name of the pod that generated this status.
                 type: string
               lastCacheUpdateTime:
+                description: |-
+                  lastCacheUpdateTime is the last time this pod successfully updated its cache
+                  with the provider.
                 format: date-time
                 type: string
               lastTransitionTime:
+                description: |-
+                  lastTransitionTime is the last time the errors reported for the provider on
+                  this pod changed.
                 format: date-time
                 type: string
               observedGeneration:
+                description: |-
+                  observedGeneration is the generation of the provider that was last processed
+                  by this pod.
                 format: int64
                 type: integer
               operations:
+                description: |-
+                  operations lists the Gatekeeper operations assigned to the pod that generated
+                  this status.
                 items:
                   type: string
                 type: array
               providerUID:
                 description: |-
-                  Storing the provider UID allows us to detect drift, such as
+                  providerUID is the UID of the provider this status reports on. Storing the
+                  provider UID allows us to detect drift, such as
                   when a provider has been recreated after its CRD was deleted
                   out from under it, interrupting the watch
                 type: string
@@ -5422,7 +6251,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     gatekeeper.sh/system: "yes"
   name: syncsets.syncset.gatekeeper.sh
@@ -5464,15 +6293,21 @@ spec:
                 type: string
             type: object
           spec:
+            description: spec defines the desired state of SyncSet.
             properties:
               gvks:
+                description: gvks lists the group, version and kind of the resources
+                  to be synced.
                 items:
                   properties:
                     group:
+                      description: group is the API group of the resource to sync.
                       type: string
                     kind:
+                      description: kind is the kind of the resource to sync.
                       type: string
                     version:
+                      description: version is the API version of the resource to sync.
                       type: string
                   type: object
                 type: array
@@ -5584,6 +6419,22 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - audit.gatekeeper.sh
+  resources:
+  - audittriggers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - audit.gatekeeper.sh
+  resources:
+  - audittriggers/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - config.gatekeeper.sh
   resources:
@@ -5794,7 +6645,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.24.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.24.0-rc.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -5913,7 +6764,7 @@ spec:
           value: manager
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(NAMESPACE),k8s.container.name=$(CONTAINER_NAME)
-        image: openpolicyagent/gatekeeper:v3.24.0-beta.0
+        image: openpolicyagent/gatekeeper:v3.24.0-rc.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -6017,6 +6868,24 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+    - pods/ephemeralcontainers
+    - pods/exec
+    - pods/log
+    - pods/eviction
+    - pods/portforward
+    - pods/proxy
+    - pods/attach
+    - pods/binding
+    - pods/resize
+    - deployments/scale
+    - replicasets/scale
+    - statefulsets/scale
+    - replicationcontrollers/scale
+    - serviceaccounts/token
+    - services/proxy
+    - nodes/proxy
+    - certificatesigningrequests/approval
+    - services/status
   sideEffects: None
   timeoutSeconds: 1
 ---
@@ -6069,8 +6938,10 @@ webhooks:
     - replicasets/scale
     - statefulsets/scale
     - replicationcontrollers/scale
+    - serviceaccounts/token
     - services/proxy
     - nodes/proxy
+    - certificatesigningrequests/approval
     - services/status
   sideEffects: None
   timeoutSeconds: 3
