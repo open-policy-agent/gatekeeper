@@ -108,6 +108,8 @@ var replacements = map[string]string{
         {{- toYaml .Values.auditPodAnnotations | trim | nindent 8 }}
         {{- end }}`,
 
+	"- HELMSUBST_DEPLOYMENT_ENABLE_AUDIT_TRIGGER": `{{ with include "gatekeeper.auditTriggerFlag" . }}- --enable-audit-trigger={{ . }}{{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_AUDIT_CHUNK_SIZE": `{{ if hasKey .Values "auditChunkSize" }}- --audit-chunk-size={{ .Values.auditChunkSize }}{{- end }}`,
 
 	"- HELMSUBST_DEPLOYMENT_AUDIT_EMIT_EVENTS": `{{ if hasKey .Values "emitAuditEvents" }}- --emit-audit-events={{ .Values.emitAuditEvents }}{{- end }}`,
