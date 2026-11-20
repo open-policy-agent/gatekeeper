@@ -91,3 +91,51 @@ func TestFindNextAuditReadyFile(t *testing.T) {
 		t.Fatalf("expected %s, got %s", second, got)
 	}
 }
+
+func TestStatExportDir(t *testing.T) {
+	t.Run("missing directory", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "absent")
+		if err := statExportDir(missing); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected not-exist error, got %v", err)
+		}
+	})
+	t.Run("existing directory", func(t *testing.T) {
+		if err := statExportDir(t.TempDir()); err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+	t.Run("path is a file", func(t *testing.T) {
+		root := t.TempDir()
+		file := filepath.Join(root, "violations")
+		if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		if err := statExportDir(file); !errors.Is(err, errExportRootNotDir) {
+			t.Fatalf("expected not-a-directory error, got %v", err)
+		}
+	})
+}
+
+func TestWaitForExportDirRecovers(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "violations")
+	done := make(chan struct{})
+	go func() {
+		waitForExportDir(root, 10*time.Millisecond)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("waitForExportDir returned while directory is absent")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitForExportDir did not return after directory appeared")
+	}
+}

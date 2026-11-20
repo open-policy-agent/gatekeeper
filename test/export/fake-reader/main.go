@@ -22,7 +22,10 @@ const (
 	admissionFilePrefix  = "admission-"
 )
 
-var errNoNewReadyFile = errors.New("no new completed export files")
+var (
+	errNoNewReadyFile   = errors.New("no new completed export files")
+	errExportRootNotDir = errors.New("path is not a directory")
+)
 
 func main() {
 	root := os.Getenv("ROOT_PATH")
@@ -35,13 +38,9 @@ func main() {
 	}
 	// The test reader uses delete mode for admission segments and retain mode for
 	// audit runs, so this flag also selects the filename class to consume.
-	info, err := os.Stat(root)
-	if err != nil {
-		log.Fatalf("failed to stat path: %v", err)
-	}
-	if !info.IsDir() {
-		log.Fatalf("path is not a directory")
-	}
+	// The export directory may not exist until a producer is configured; wait
+	// for it instead of exiting so the reader recovers without a restart.
+	waitForExportDir(root, defaultPollInterval)
 
 	lastAuditPath := ""
 	for {
@@ -60,6 +59,40 @@ func main() {
 			lastAuditPath = path
 			time.Sleep(defaultPollInterval)
 		}
+	}
+}
+
+// statExportDir reports whether the export root is ready for consumption. A
+// missing directory is expected while no export producer is configured.
+func statExportDir(root string) error {
+	info, err := os.Stat(root)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return errExportRootNotDir
+	}
+	return nil
+}
+
+// waitForExportDir blocks until root exists and is a directory. The wait is
+// logged only when the reason changes so a missing producer neither crashes
+// the reader nor spams the log.
+func waitForExportDir(root string, pollInterval time.Duration) {
+	loggedReason := ""
+	for {
+		err := statExportDir(root)
+		if err == nil {
+			if loggedReason != "" {
+				log.Printf("export directory %s is ready, starting consumption", root)
+			}
+			return
+		}
+		if reason := err.Error(); reason != loggedReason {
+			log.Printf("waiting for export directory %s: %v", root, err)
+			loggedReason = reason
+		}
+		time.Sleep(pollInterval)
 	}
 }
 
