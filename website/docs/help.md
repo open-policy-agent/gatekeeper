@@ -65,7 +65,9 @@ For code updates, to ensure high quality commits, we require that all pull reque
 
 #### Optional benchmarking of changes
 
-To ensure that any changes made to the code do not negatively impact its performance, you can run benchmark tests on the changes included in a pull request. To do this, simply comment `/benchmark` on the pull request. This will trigger the benchmark tests to run on both the current HEAD and the code changes in the pull request. The results of the benchmark tests will then be commented on the pull request using [benchstat](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat).
+Performance benchmarks are opt-in; ordinary pull requests still run unit coverage and race detection automatically. A repository collaborator with write access can comment `/benchmark` on an open pull request to compare its base and head commits, including pull requests from forks. Contributors without write access can ask a maintainer to request the comparison.
+
+The workflow records both commit SHAs when the request is made, prepares each snapshot's Go and envtest versions, and runs the existing benchmark suite ten times with `GOMAXPROCS=1`. The [benchstat](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) comparison is posted to the request's status comment, together with the tested SHAs and workflow link. Pushes during a run do not change the snapshots being measured; comment `/benchmark` again to measure a newer revision. Benchmark execution and reporting failures are linked from the same status comment.
 
 If you are introducing a new feature, doing a big refactor, or fixing a critical bug, it's especially important to run benchmark tests on the changes you are trying to merge. This will help ensure that the changes do not negatively impact the performance of the code and that it continues to function as expected.
 
