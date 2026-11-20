@@ -653,12 +653,13 @@ func setupControllers(ctx context.Context, mgr ctrl.Manager, tracker *readiness.
 		setupLog.Info("setting up audit")
 		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), cm)
 		auditDeps := audit.Dependencies{
-			Client:          client,
-			ProcessExcluder: processExcluder,
-			CacheLister:     auditCache,
-			ExpansionSystem: expansionSystem,
-			ExportSystem:    exportSystem,
-			GetPod:          opts.GetPod,
+			Client:           client,
+			InitialDataReady: tracker.SatisfiedForAudit,
+			ProcessExcluder:  processExcluder,
+			CacheLister:      auditCache,
+			ExpansionSystem:  expansionSystem,
+			ExportSystem:     exportSystem,
+			GetPod:           opts.GetPod,
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")

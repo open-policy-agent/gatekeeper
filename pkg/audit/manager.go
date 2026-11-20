@@ -43,7 +43,9 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -54,6 +56,7 @@ const (
 	crdName                          = "constrainttemplates.templates.gatekeeper.sh"
 	constraintsGV                    = "constraints.gatekeeper.sh/v1beta1"
 	msgSize                          = 256
+	maxAuditErrors                   = 10
 	defaultAuditInterval             = 60
 	defaultConstraintViolationsLimit = 20
 	defaultListLimit                 = 500
@@ -62,7 +65,8 @@ const (
 )
 
 var (
-	auditInterval                = flag.Int64("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
+	auditInterval                = flag.Int64("audit-interval", defaultAuditInterval, "interval to run periodic audit in seconds. defaulted to 60 secs if unspecified, 0 to disable periodic audits; on-demand audits require --enable-audit-trigger")
+	enableAuditTrigger           = flag.Bool("enable-audit-trigger", false, "(alpha) enable on-demand audits and AuditTrigger status reporting")
 	constraintViolationsLimit    = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
 	auditChunkSize               = flag.Int("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
 	auditFromCache               = flag.Bool("audit-from-cache", false, "audit synced resources from internal cache, bypassing direct queries to Kubernetes API server")
@@ -98,6 +102,9 @@ type Manager struct {
 
 	// returns the running pod injected by the main controller
 	getPod func(context.Context) (*corev1.Pod, error)
+
+	auditTriggerWake chan struct{}
+	initialDataReady func(fromCache bool) bool
 }
 
 // StatusViolation represents each violation under status.
@@ -233,6 +240,9 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 	if exportutil.AuditExportEnabledForProcess() && deps.ExportSystem == nil {
 		return nil, errors.New("audit violation export requires an export system")
 	}
+	if *enableAuditTrigger && deps.InitialDataReady == nil {
+		return nil, errors.New("audit trigger requires an initial ingestion readiness check")
+	}
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -246,18 +256,22 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		corev1.EventSource{Component: "gatekeeper-audit"})
 
 	am := &Manager{
-		opa:             deps.Client,
-		stopper:         make(chan struct{}),
-		stopped:         make(chan struct{}),
-		mgr:             mgr,
-		reporter:        reporter,
-		processExcluder: deps.ProcessExcluder,
-		eventRecorder:   recorder,
-		gkNamespace:     util.GetNamespace(),
-		auditCache:      deps.CacheLister,
-		expansionSystem: deps.ExpansionSystem,
-		exportSystem:    deps.ExportSystem,
-		getPod:          deps.GetPod,
+		opa:              deps.Client,
+		stopper:          make(chan struct{}),
+		stopped:          make(chan struct{}),
+		mgr:              mgr,
+		reporter:         reporter,
+		processExcluder:  deps.ProcessExcluder,
+		eventRecorder:    recorder,
+		gkNamespace:      util.GetNamespace(),
+		auditCache:       deps.CacheLister,
+		expansionSystem:  deps.ExpansionSystem,
+		exportSystem:     deps.ExportSystem,
+		getPod:           deps.GetPod,
+		auditTriggerWake: make(chan struct{}, 1),
+	}
+	if *enableAuditTrigger {
+		am.initialDataReady = deps.InitialDataReady
 	}
 	return am, nil
 }
@@ -265,8 +279,22 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 // audit performs an audit then updates the status of all constraint resources with the results.
 func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
-	timestamp := startTime.UTC().Format(time.RFC3339)
-	am.log = log.WithValues(logging.AuditID, timestamp)
+	timestamp := startTime.UTC().Format(time.RFC3339Nano)
+	am.log = logf.FromContext(ctx).WithValues(logging.AuditID, timestamp)
+
+	// A cold readiness check can defer without starting a run. All other
+	// attempts, including empty scans and actual discovery failures, are reported.
+	checkingReadiness := am.initialDataReady != nil
+	var constraintsGVKs []schema.GroupVersionKind
+	var hasConstraints bool
+	var err error
+	if checkingReadiness {
+		constraintsGVKs, hasConstraints, err = am.prepareAudit(ctx)
+		if onlyAwaitingInitialData(err) {
+			return err
+		}
+	}
+
 	logStart(am.log)
 	auditExportPublishingState := auditExportPublishingState{
 		SuccessCount: 0,
@@ -291,24 +319,11 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Error(err, "failed to report run start time")
 	}
 
-	// Create a new client to get an updated RESTMapper.
-	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
+	if !checkingReadiness {
+		constraintsGVKs, hasConstraints, err = am.prepareAudit(ctx)
+	}
 	if err != nil {
 		return err
-	}
-	am.client = c
-	// don't audit anything until the constraintTemplate crd is in the cluster
-	if err := am.ensureCRDExists(ctx); err != nil {
-		am.log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
-		return nil
-	}
-
-	// get all constraint kinds
-	constraintsGVKs, err := am.getAllConstraintKinds()
-	if err != nil {
-		// if no constraint is found with the constraint apiversion, then return
-		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
-		return nil
 	}
 
 	updateLists := make(map[util.KindVersionName]*LimitQueue)
@@ -319,10 +334,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		totalViolationsPerEnforcementAction[action] = 0
 	}
 
-	hasConstraints, err := am.hasConstraintInstances(ctx, constraintsGVKs)
-	if err != nil {
-		am.log.Error(err, "unable to determine whether constraints exist; continuing audit")
-	} else if !hasConstraints {
+	if !hasConstraints {
 		return am.handleNoConstraints(totalViolationsPerEnforcementAction)
 	}
 
@@ -334,8 +346,10 @@ func (am *Manager) audit(ctx context.Context) error {
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
-
 		am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
+		if len(errs) > 0 {
+			return errors.Join(errs...)
+		}
 	} else {
 		am.log.WithValues(logging.Semantic, true).Info("Auditing via discovery client")
 		err := am.auditResources(ctx, constraintsGVKs, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, &auditExportPublishingState)
@@ -359,9 +373,41 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// update constraints for each kind
-	am.writeAuditResults(ctx, constraintsGVKs, updateLists, timestamp, totalViolationsPerConstraint)
+	return am.writeAuditResults(ctx, constraintsGVKs, updateLists, timestamp, totalViolationsPerConstraint)
+}
 
-	return nil
+func (am *Manager) prepareAudit(ctx context.Context) ([]schema.GroupVersionKind, bool, error) {
+	// Use a fresh RESTMapper for each attempt.
+	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme()})
+	if err != nil {
+		return nil, false, err
+	}
+	am.client = c
+	if err := am.ensureCRDExists(ctx); err != nil {
+		return nil, false, fmt.Errorf("checking ConstraintTemplate CRD: %w", err)
+	}
+	kinds, err := am.getAllConstraintKinds()
+	if err != nil {
+		return nil, false, fmt.Errorf("discovering constraint kinds: %w", err)
+	}
+	hasConstraints, err := am.hasConstraintInstances(ctx, kinds)
+	if err == nil && !hasConstraints {
+		return kinds, false, nil
+	}
+	if am.initialDataReady != nil {
+		if !am.initialDataReady(*auditFromCache) {
+			if err != nil {
+				return nil, false, fmt.Errorf("checking for constraint instances: %w", err)
+			}
+			am.log.Info("Deferring audit until initial policy and data are ingested")
+			return nil, false, errAwaitingInitialData
+		}
+		am.initialDataReady = nil
+	}
+	if err != nil {
+		am.log.Error(err, "unable to determine whether constraints exist; continuing audit")
+	}
+	return kinds, true, nil
 }
 
 // Audits server resources via the discovery client.
@@ -386,10 +432,22 @@ func (am *Manager) auditResources(
 		return err
 	}
 
-	serverResourceLists, err := discoveryClient.ServerPreferredResources()
+	var errs []error
+	var skippedScope error
+	// Periodic audits can publish the readable scope. A trigger, even when
+	// covered by a scheduled audit, requires a complete scan.
+	recordScopeError := func(err error) {
+		if *enableAuditTrigger {
+			errs = appendAuditError(errs, err)
+		} else if skippedScope == nil {
+			skippedScope = boundedAuditError(err)
+		}
+	}
+	serverResourceLists, err := discoveryClient.ServerPreferredResourcesWithContext(ctx)
 	if err != nil {
 		if discovery.IsGroupDiscoveryFailedError(err) {
-			am.log.Error(err, "Kubernetes has an orphaned APIService. Delete orphaned APIService using kubectl delete apiservice <name>")
+			am.log.Error(err, "Incomplete resource discovery; auditing available resources")
+			recordScopeError(fmt.Errorf("discovering audit resources: %w", err))
 		} else {
 			return err
 		}
@@ -400,6 +458,7 @@ func (am *Manager) auditResources(
 		gvParsed, err := schema.ParseGroupVersion(rl.GroupVersion)
 		if err != nil {
 			am.log.Error(err, "Error parsing GroupVersion", "GroupVersion", rl.GroupVersion)
+			errs = appendAuditError(errs, fmt.Errorf("parsing discovered group version %q: %w", rl.GroupVersion, err))
 			continue
 		}
 
@@ -407,12 +466,12 @@ func (am *Manager) auditResources(
 			Group:   gvParsed.Group,
 			Version: gvParsed.Version,
 		}
-		if _, ok := clusterAPIResources[gv]; !ok {
-			clusterAPIResources[gv] = make(map[string]bool)
-		}
 		for i := range rl.APIResources {
 			for _, verb := range rl.APIResources[i].Verbs {
 				if verb == "list" {
+					if clusterAPIResources[gv] == nil {
+						clusterAPIResources[gv] = make(map[string]bool)
+					}
 					clusterAPIResources[gv][rl.APIResources[i].Kind] = true
 					break
 				}
@@ -420,7 +479,6 @@ func (am *Manager) auditResources(
 		}
 	}
 
-	var errs []error
 	namespaceCache := newNSCache()
 
 	matchedKinds := make(map[string]bool)
@@ -431,6 +489,7 @@ func (am *Manager) auditResources(
 			constraintList.SetGroupVersionKind(c)
 			if err = am.client.List(ctx, constraintList); err != nil {
 				am.log.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
+				errs = appendAuditError(errs, fmt.Errorf("listing constraints for %s: %w", c, err))
 				continue
 			}
 			for _, constraint := range constraintList.Items {
@@ -446,11 +505,13 @@ func (am *Manager) auditResources(
 						kind, ok := k.(map[string]interface{})
 						if !ok {
 							am.log.Error(errors.New("could not cast kind as map[string]"), "kind", k)
+							errs = appendAuditError(errs, fmt.Errorf("invalid spec.match.kinds entry for %s: %v", c, k))
 							continue
 						}
 						kindsKind, _, err := unstructured.NestedSlice(kind, "kinds")
 						if err != nil {
 							am.log.Error(err, "Unable to return kinds.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+							errs = appendAuditError(errs, fmt.Errorf("reading spec.match.kinds for %s: %w", c, err))
 							continue
 						}
 						for _, kk := range kindsKind {
@@ -458,6 +519,7 @@ func (am *Manager) auditResources(
 							if !ok {
 								err := fmt.Errorf("invalid kinds.kinds value type %#v, want string", kk)
 								am.log.Error(err, "group", c.Group, "version", c.Version, "kind", c.Kind)
+								errs = appendAuditError(errs, err)
 								continue constraintsLoop
 							}
 
@@ -481,6 +543,8 @@ func (am *Manager) auditResources(
 		matchedKinds["*"] = true
 	}
 
+	reviewedKind := false
+	var coverage objectReviewCoverage
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
@@ -514,6 +578,13 @@ func (am *Manager) auditResources(
 				err := am.client.List(ctx, objList, opts)
 				if err != nil {
 					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+					listErr := fmt.Errorf("listing resources for %s, Kind=%s: %w", gv, kind, err)
+					// A failure resolving the REST mapping or fetching a later page isn't a scoped LIST denial.
+					if opts.Continue == "" && isForbiddenResourceRead(err) {
+						recordScopeError(listErr)
+					} else {
+						errs = appendAuditError(errs, listErr)
+					}
 					continue kindsLoop
 				}
 				// for each batch, create a parent folder
@@ -522,6 +593,7 @@ func (am *Manager) auditResources(
 				parentDir := path.Join(*apiCacheDir, subPath)
 				if err := os.Mkdir(parentDir, 0o750); err != nil {
 					am.log.Error(err, "Unable to create parentDir", "parentDir", parentDir)
+					errs = appendAuditError(errs, fmt.Errorf("creating audit spool directory: %w", err))
 					continue kindsLoop
 				}
 				folderCount++
@@ -530,6 +602,8 @@ func (am *Manager) auditResources(
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
 						log.Error(err, "error while excluding namespaces")
+						errs = appendAuditError(errs, fmt.Errorf("checking excluded namespace: %w", err))
+						continue
 					}
 
 					if isExcludedNamespace {
@@ -540,11 +614,12 @@ func (am *Manager) auditResources(
 
 				nextResourceVersion := objList.GetResourceVersion()
 				nextContinue := objList.GetContinue()
-				writeErr := am.writeUnstructuredListBestEffort(parentDir, itemsToReview)
+				writeErr := am.writeUnstructuredList(parentDir, itemsToReview)
 				resourceVersion = nextResourceVersion
 				opts.Continue = nextContinue
 				if writeErr != nil {
 					log.Error(writeErr, "error writing data to file")
+					errs = appendAuditError(errs, fmt.Errorf("writing audit spool: %w", writeErr))
 					if opts.Continue == "" {
 						break
 					}
@@ -560,19 +635,33 @@ func (am *Manager) auditResources(
 			}
 			// Loop through all subDirs to review all files for this kind.
 			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
-			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
+			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, &coverage, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
 			if err != nil {
-				errs = append(errs, err)
+				errs = appendAuditError(errs, err)
 				continue
 			}
+			reviewedKind = true
 			am.log.V(logging.DebugLevel).Info("Review complete for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 		}
 	}
 
-	if len(errs) > 0 {
-		return mergeErrors(errs)
+	if coverage.deniedNamespace != nil && !coverage.reviewed {
+		errs = appendAuditError(errs, fmt.Errorf("no objects could be reviewed: %w", coverage.deniedNamespace))
 	}
-	return nil
+	if !reviewedKind && len(errs) == 0 {
+		if skippedScope != nil {
+			return fmt.Errorf("no resource kinds could be audited: %w", skippedScope)
+		}
+		if len(clusterAPIResources) == 0 {
+			return errors.New("resource discovery returned no listable kinds")
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func isForbiddenResourceRead(err error) bool {
+	var mappingErr *apiutil.ErrResourceDiscoveryFailed
+	return apierrors.IsForbidden(err) && !errors.As(err, &mappingErr)
 }
 
 func shouldAuditKind(matchedKinds map[string]bool, kind string) bool {
@@ -585,11 +674,11 @@ func shouldAuditKind(matchedKinds map[string]bool, kind string) bool {
 func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	objs, err := am.auditCache.ListObjects(ctx)
 	if err != nil {
-		return nil, []error{fmt.Errorf("unable to list objects from audit cache: %w", err)}
+		return nil, appendAuditError(nil, fmt.Errorf("unable to list objects from audit cache: %w", err))
 	}
 	nsMap, err := nsMapFromObjs(objs)
 	if err != nil {
-		return nil, []error{fmt.Errorf("unable to build namespaces from cache: %w", err)}
+		return nil, appendAuditError(nil, fmt.Errorf("unable to build namespaces from cache: %w", err))
 	}
 
 	var results []Result
@@ -606,6 +695,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		excluded, err := am.skipExcludedNamespace(&obj)
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to exclude object namespace for audit from cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
+			errs = appendAuditError(errs, fmt.Errorf("checking cached object namespace: %w", err))
 			continue
 		}
 
@@ -628,6 +718,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		resp, err := am.opa.Review(ctx, au, opts...)
 		if err != nil {
 			am.log.Error(err, fmt.Sprintf("Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName()))
+			errs = appendAuditError(errs, fmt.Errorf("reviewing cached object %s %s/%s: %w", obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err))
 			continue
 		}
 
@@ -671,13 +762,20 @@ func nsMapFromObjs(objs []unstructured.Unstructured) (map[string]*corev1.Namespa
 	return nsMap, nil
 }
 
-func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
+// Retain the previous results if every review candidate needed an unreadable namespace.
+type objectReviewCoverage struct {
+	reviewed        bool
+	deniedNamespace error
+}
+
+func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache, coverage *objectReviewCoverage,
 	updateLists map[util.KindVersionName]*LimitQueue,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
 	auditExportPublishingState *auditExportPublishingState,
 ) error {
+	var errs []error
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
 		// apiCacheDir/kind_folderIndex/fileIndex
@@ -687,6 +785,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 		files, err := am.getFilesFromDir(pDir, *auditChunkSize)
 		if err != nil {
 			am.log.Error(err, "Unable to get files from directory")
+			errs = appendAuditError(errs, fmt.Errorf("reading audit spool directory: %w", err))
 			continue
 		}
 		for _, fileName := range files {
@@ -698,6 +797,14 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					nsRef, err := nsCache.Get(ctx, am.client, objNs)
 					if err != nil {
 						am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
+						readErr := fmt.Errorf("reading namespace %q for audit: %w", objNs, err)
+						if !*enableAuditTrigger && isForbiddenResourceRead(err) {
+							if coverage.deniedNamespace == nil {
+								coverage.deniedNamespace = boundedAuditError(readErr)
+							}
+						} else {
+							errs = appendAuditError(errs, readErr)
+						}
 						return
 					}
 					ns = &nsRef
@@ -718,6 +825,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				resp, err := am.opa.Review(ctx, augmentedObj, opts...)
 				if err != nil {
 					am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
+					errs = appendAuditError(errs, fmt.Errorf("reviewing object %s %s/%s: %w", objFile.GroupVersionKind(), objNs, objFile.GetName(), err))
 					return
 				}
 
@@ -731,6 +839,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				resultants, err := am.expansionSystem.Expand(base)
 				if err != nil {
 					am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
+					errs = appendAuditError(errs, fmt.Errorf("expanding object %s %s/%s: %w", objFile.GroupVersionKind(), objNs, objFile.GetName(), err))
 					return
 				}
 				for _, resultant := range resultants {
@@ -749,6 +858,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					resultantResp, err := am.opa.Review(ctx, au, resultantOpts...)
 					if err != nil {
 						am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
+						errs = appendAuditError(errs, fmt.Errorf("reviewing expanded object %s: %w", resultant.Obj.GetName(), err))
 						continue
 					}
 					expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
@@ -765,6 +875,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					)
 				}
 
+				coverage.reviewed = true
 				if len(resp.Results()) > 0 {
 					results := ToResults(&augmentedObj.Object, resp)
 					am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp, auditExportPublishingState)
@@ -772,11 +883,12 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			})
 			if err != nil {
 				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
+				errs = appendAuditError(errs, fmt.Errorf("reading audit spool file %q: %w", filePath, err))
 				continue
 			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []string, err error) {
@@ -788,11 +900,14 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if errors.Is(err, io.EOF) || len(names) == 0 {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return files, err
+		}
+		if len(names) == 0 {
+			break
 		}
 		files = append(files, names...)
 	}
@@ -807,8 +922,11 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if errors.Is(err, io.EOF) || len(names) == 0 {
+		if errors.Is(err, io.EOF) {
 			break
+		}
+		if err != nil {
+			return err
 		}
 		for _, n := range names {
 			err = os.RemoveAll(path.Join(directory, n))
@@ -816,21 +934,14 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 				return err
 			}
 		}
+		if len(names) == 0 {
+			break
+		}
 	}
 	return nil
 }
 
-func (am *Manager) writeUnstructuredList(directory string, objects []unstructured.Unstructured) error {
-	return am.writeUnstructuredListFunc(directory, objects, nil)
-}
-
-func (am *Manager) writeUnstructuredListBestEffort(directory string, objects []unstructured.Unstructured) error {
-	return am.writeUnstructuredListFunc(directory, objects, func(err error) {
-		log.Error(err, "error while marshaling unstructured object to JSON")
-	})
-}
-
-func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstructured.Unstructured, handleMarshalError func(error)) error {
+func (am *Manager) writeUnstructuredList(directory string, objects []unstructured.Unstructured) (err error) {
 	if len(objects) == 0 {
 		return nil
 	}
@@ -839,7 +950,9 @@ func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstruc
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	writer := bufio.NewWriter(file)
 	if _, err := writer.WriteString("["); err != nil {
@@ -849,11 +962,7 @@ func (am *Manager) writeUnstructuredListFunc(directory string, objects []unstruc
 	for index := range objects {
 		jsonBytes, err := objects[index].MarshalJSON()
 		if err != nil {
-			if handleMarshalError == nil {
-				return err
-			}
-			handleMarshalError(err)
-			continue
+			return err
 		}
 		if wroteObject {
 			if _, err := writer.WriteString(","); err != nil {
@@ -951,20 +1060,115 @@ func (am *Manager) readUnstructuredList(jsonBytes []byte) ([]unstructured.Unstru
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(*auditInterval) * time.Second)
-	defer ticker.Stop()
+	ctx = logf.IntoContext(ctx, log)
+
+	var runner *auditTriggerRunner
+	if *enableAuditTrigger {
+		runner = &auditTriggerRunner{
+			reader: am.mgr.GetAPIReader(),
+			client: am.mgr.GetClient(),
+			audit:  am.audit,
+			now:    time.Now,
+		}
+	}
+	ticker, tickerC := newAuditTicker(time.Duration(*auditInterval) * time.Second)
+	if ticker != nil {
+		defer ticker.Stop()
+		if runner != nil {
+			runner.resetTicker = func() {
+				ticker.Reset(time.Duration(*auditInterval) * time.Second)
+			}
+		}
+	} else if runner != nil {
+		log.Info("periodic auditing is disabled; audits can still be triggered with AuditTrigger")
+	}
+	am.runAuditLoop(ctx, tickerC, runner, clock.RealClock{})
+}
+
+func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, runner *auditTriggerRunner, timerClock clock.Clock) {
+	var triggerWake <-chan struct{}
+	if runner != nil {
+		triggerWake = am.auditTriggerWake
+	}
+	const maxRetryDelay = 30 * time.Second
+	retryDelay := time.Second
+	var retryTimer clock.Timer
+	var retryC <-chan time.Time
+	defer func() {
+		if retryTimer != nil {
+			retryTimer.Stop()
+		}
+	}()
+	scheduleRetry := func() {
+		if retryTimer != nil {
+			retryTimer.Stop()
+		}
+		delay := min(wait.Jitter(retryDelay, 0.1), maxRetryDelay)
+		retryDelay = min(retryDelay*2, maxRetryDelay)
+		retryTimer = timerClock.NewTimer(delay)
+		retryC = retryTimer.C()
+	}
+	resetRetry := func() {
+		if retryTimer != nil {
+			retryTimer.Stop()
+			retryTimer = nil
+		}
+		retryC = nil
+		retryDelay = time.Second
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("Audit Manager close")
 			close(am.stopper)
 			return
-		case <-ticker.C:
-			if err := am.audit(ctx); err != nil {
-				log.Error(err, "audit manager audit() failed")
+		case <-tickerC:
+			var err error
+			if runner == nil {
+				err = am.audit(ctx)
+			} else {
+				err = runner.run(ctx, false)
+			}
+			if err != nil {
+				if !onlyAwaitingInitialData(err) {
+					log.Error(err, "audit manager audit() failed")
+				}
+				if runner != nil && (runner.pending != nil || runner.deferredUID != "") {
+					scheduleRetry()
+				}
+			} else {
+				resetRetry()
+			}
+		case <-retryC:
+			retryC = nil
+			am.notifyAuditTrigger()
+		case <-triggerWake:
+			err := runner.run(ctx, true)
+			if err != nil {
+				if !onlyAwaitingInitialData(err) {
+					log.Error(err, "on-demand audit failed")
+				}
+				scheduleRetry()
+			} else {
+				resetRetry()
 			}
 		}
 	}
+}
+
+func (am *Manager) notifyAuditTrigger() {
+	select {
+	case am.auditTriggerWake <- struct{}{}:
+	default:
+	}
+}
+
+func newAuditTicker(interval time.Duration) (*time.Ticker, <-chan time.Time) {
+	if interval == 0 {
+		return nil, nil
+	}
+	ticker := time.NewTicker(interval)
+	return ticker, ticker.C
 }
 
 // Start implements controller.Controller.
@@ -988,6 +1192,9 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	}
 	l, err := discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	resourceGV := strings.Split(constraintsGV, "/")
@@ -1101,20 +1308,19 @@ func (am *Manager) stopAuditResultsUpdateLoop() {
 	}
 	// this is closing the previous audit reporting thread
 	am.log.Info("closing the previous audit reporting thread")
-	close(am.ucloop.stop)
-	select {
-	case <-am.ucloop.stopped:
-	case <-time.After(time.Duration(*auditInterval) * time.Second):
-		// avoid deadlocking in cases where ucloop never stops
-		// this creates potential leak of threads but avoids potential of deadlocking
-		am.log.Info("timeout waiting for previous audit reporting thread to finish")
+	if am.ucloop.cancel != nil {
+		am.ucloop.cancel()
 	}
+	close(am.ucloop.stop)
+	<-am.ucloop.stopped
 	am.ucloop = nil
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) {
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName]*LimitQueue, timestamp string, totalViolations map[util.KindVersionName]int64) error {
 	am.stopAuditResultsUpdateLoop()
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	am.ucloop = &updateConstraintLoop{
 		client:  am.client,
 		stop:    make(chan struct{}),
@@ -1123,9 +1329,14 @@ func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []sche
 		ts:      timestamp,
 		tv:      totalViolations,
 		log:     am.log,
+		cancel:  cancel,
 	}
 
 	go am.ucloop.update(ctx, constraintsGVKs)
+	<-am.ucloop.stopped
+	err := am.ucloop.err
+	am.ucloop = nil
+	return err
 }
 
 func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
@@ -1138,9 +1349,26 @@ func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, 
 }
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults *LimitQueue, timestamp string, totalViolations int64) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	previous, _, err := unstructured.NestedString(instance.Object, "status", "auditTimestamp")
+	if err != nil {
+		return err
+	}
+	previousTime, previousErr := time.Parse(time.RFC3339Nano, previous)
+	runTime, runErr := time.Parse(time.RFC3339Nano, timestamp)
+	if previousErr == nil && runErr == nil && previousTime.After(runTime) {
+		return fmt.Errorf("constraint %s already has audit results from %s, newer than this audit's %s", instance.GetName(), previous, timestamp)
+	}
 	constraintName := instance.GetName()
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
 
+	results := *auditResults
+	results.svq = append(SVQueue(nil), auditResults.svq...)
+	auditResults = &results
 	var statusViolations []interface{}
 	for auditResults.Len() > 0 {
 		if len(statusViolations) < *constraintViolationsLimit {
@@ -1196,6 +1424,21 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	return nil
 }
 
+// Copy bounded diagnostics instead of retaining arbitrary resource error chains.
+func boundedAuditError(err error) error {
+	return errors.New(strings.Clone(truncateString(err.Error(), msgSize)))
+}
+
+func appendAuditError(errs []error, err error) []error {
+	if len(errs) > maxAuditErrors {
+		return errs
+	}
+	if len(errs) == maxAuditErrors {
+		return append(errs, errors.New("additional audit errors omitted"))
+	}
+	return append(errs, boundedAuditError(err))
+}
+
 func truncateString(str string, size int) string {
 	shortenStr := str
 	if len(str) > size {
@@ -1216,6 +1459,8 @@ type updateConstraintLoop struct {
 	ts      string
 	tv      map[util.KindVersionName]int64
 	log     logr.Logger
+	cancel  context.CancelFunc
+	err     error
 }
 
 func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs []schema.GroupVersionKind) {
@@ -1234,10 +1479,13 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		ucloop.log.Info("constraint", "resource kind", constraintGvk.Kind)
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(constraintGvk)
-		err := ucloop.client.List(ctx, instanceList)
+		listCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		err := ucloop.client.List(listCtx, instanceList)
+		cancel()
 		if err != nil {
 			ucloop.log.Error(err, "error while listing constraints", "kind", constraintGvk.Kind)
-			continue
+			ucloop.err = err
+			return
 		}
 		ucloop.log.Info("constraint", "count of constraints", len(instanceList.Items))
 
@@ -1254,6 +1502,13 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 
 	ucloop.log.Info("starting update constraints loop", "constraints to update", fmt.Sprintf("%v", ucloop.uc))
 
+	pendingErrors := make(map[util.KindVersionName]error)
+	recordError := func(key util.KindVersionName, err error) {
+		if _, exists := pendingErrors[key]; !exists && len(pendingErrors) >= maxAuditErrors {
+			return
+		}
+		pendingErrors[key] = boundedAuditError(err)
+	}
 	updateLoop := func() (bool, error) {
 		for key := range ucloop.uc {
 			select {
@@ -1268,13 +1523,18 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					Namespace: key.Namespace,
 				}
 				// get the latest constraint
-				err := ucloop.client.Get(ctx, namespacedName, constraint)
+				getCtx, cancel := context.WithTimeout(ctx, time.Minute)
+				err := ucloop.client.Get(getCtx, namespacedName, constraint)
+				cancel()
 				if err != nil {
 					if apierrors.IsNotFound(err) {
 						ucloop.log.Info("could not find constraint", "name", key.Name, "namespace", key.Namespace)
 						delete(ucloop.uc, key)
+						delete(pendingErrors, key)
+						continue
 					} else {
 						ucloop.log.Error(err, "could not get latest constraint during update", "name", key.Name, "namespace", key.Namespace)
+						recordError(key, fmt.Errorf("getting constraint %s %s: %w", constraint.GroupVersionKind(), namespacedName, err))
 						continue
 					}
 				}
@@ -1283,6 +1543,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					err := ucloop.updateConstraintStatus(ctx, constraint, emptyAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						ucloop.log.Error(err, "could not update constraint status", "name", key.Name, "namespace", key.Namespace)
+						recordError(key, fmt.Errorf("updating constraint %s %s status: %w", constraint.GroupVersionKind(), namespacedName, err))
 						continue
 					}
 				} else {
@@ -1290,10 +1551,12 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					err := ucloop.updateConstraintStatus(ctx, constraint, constraintAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						ucloop.log.Error(err, "could not update constraint status", "name", key.Name, "namespace", key.Namespace)
+						recordError(key, fmt.Errorf("updating constraint %s %s status: %w", constraint.GroupVersionKind(), namespacedName, err))
 						continue
 					}
 				}
 				delete(ucloop.uc, key)
+				delete(pendingErrors, key)
 			}
 		}
 		if len(ucloop.uc) == 0 {
@@ -1302,13 +1565,21 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		return false, nil
 	}
 
-	if err := wait.ExponentialBackoff(wait.Backoff{
+	if err := wait.ExponentialBackoffWithContext(ctx, wait.Backoff{
 		Duration: 1 * time.Second,
 		Factor:   2,
 		Jitter:   1,
 		Steps:    5,
-	}, updateLoop); err != nil {
-		ucloop.log.Error(err, "could not update constraint reached max retries", "remaining update constraints", fmt.Sprintf("%v", ucloop.uc))
+	}, func(context.Context) (bool, error) { return updateLoop() }); err != nil {
+		errs := []error{err}
+		for _, cause := range pendingErrors {
+			errs = append(errs, cause)
+		}
+		if len(ucloop.uc) > len(pendingErrors) {
+			errs = append(errs, errors.New("additional constraint reporting errors omitted"))
+		}
+		ucloop.err = errors.Join(errs...)
+		ucloop.log.Error(ucloop.err, "could not update constraint reached max retries", "remaining update constraints", fmt.Sprintf("%v", ucloop.uc))
 	}
 }
 
