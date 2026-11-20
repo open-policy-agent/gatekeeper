@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Renders the Gatekeeper chart with violation export values and checks the
-# audit --enable-violation-export flag, the disk Connection driver, the audit
-# export volume and mount, and the audit demo sidecar.
+# Renders the Gatekeeper chart and checks optional audit-trigger arguments and
+# RBAC, violation export arguments, the disk Connection driver, the audit export
+# volume and mount, and the audit demo sidecar.
 # Requires helm, yq (v4) and jq. Set HELM or CHART to override the defaults.
 set -euo pipefail
 
@@ -58,6 +58,33 @@ reject_dapr() {
     failures=$((failures + 1))
   fi
 }
+
+check_audit_trigger() {
+  local name="$1" want="$2|$3" got
+  shift 3
+  got="$("${HELM}" template gatekeeper "${CHART}" "$@" | yq -o=json -I=0 '.' - | jq -rs '
+    map(select(. != null)) as $docs
+    | ([$docs[] | select(.kind == "Deployment" and .metadata.name == "gatekeeper-audit")
+        | .spec.template.spec.containers[] | select(.name == "manager") | .args[]
+        | select(startswith("--enable-audit-trigger=")) | ltrimstr("--enable-audit-trigger=")]
+       | first // "omitted") as $flag
+    | ([$docs[] | select(.kind == "ClusterRole" and .metadata.name == "gatekeeper-manager-role")
+        | .rules[] | select((.apiGroups | index("audit.gatekeeper.sh")) and
+                           (.resources | index("audittriggers/status")))
+        | .verbs[] | select(. == "patch" or . == "update")] | length > 0) as $writes
+    | [$flag, (if $writes then "yes" else "no" end)] | join("|")')"
+  if [[ "${got}" == "${want}" ]]; then
+    echo "PASS: ${name}"
+  else
+    echo "FAIL: ${name}: want ${want}, got ${got}"
+    failures=$((failures + 1))
+  fi
+}
+
+check_audit_trigger "audit trigger defaults" omitted no
+check_audit_trigger "audit trigger false"    false   no  --set enableAuditTrigger=false
+check_audit_trigger "audit trigger true"     true    yes --set enableAuditTrigger=true
+check_audit_trigger "audit disabled"         omitted no  --set enableAuditTrigger=true --set disableAudit=true
 
 #     name                                  flag     volume driver sidecar args
 check "defaults"                            omitted  no     none   no

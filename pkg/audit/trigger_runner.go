@@ -11,66 +11,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const auditTriggerControllerName = "audit-trigger-controller"
-
 var auditTriggerKey = types.NamespacedName{Name: auditv1alpha1.AuditTriggerName}
-
-type auditTriggerReconciler struct {
-	client client.Client
-	wake   chan<- struct{}
-}
-
-// +kubebuilder:rbac:groups=audit.gatekeeper.sh,resources=audittriggers,verbs=get;list;watch
-// +kubebuilder:rbac:groups=audit.gatekeeper.sh,resources=audittriggers/status,verbs=get;patch;update
-
-func addAuditTriggerController(mgr manager.Manager, am *Manager) error {
-	c, err := controller.New(auditTriggerControllerName, mgr, controller.Options{
-		Reconciler: &auditTriggerReconciler{client: mgr.GetClient(), wake: am.auditTriggerWake},
-	})
-	if err != nil {
-		return err
-	}
-	return c.Watch(source.Kind(
-		mgr.GetCache(),
-		&auditv1alpha1.AuditTrigger{},
-		&handler.TypedEnqueueRequestForObject[*auditv1alpha1.AuditTrigger]{},
-	))
-}
-
-func (r *auditTriggerReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	if request.NamespacedName != auditTriggerKey {
-		return reconcile.Result{}, nil
-	}
-	trigger := &auditv1alpha1.AuditTrigger{}
-	if err := r.client.Get(ctx, auditTriggerKey, trigger); err != nil {
-		return reconcile.Result{}, client.IgnoreNotFound(err)
-	}
-	if !trigger.DeletionTimestamp.IsZero() {
-		return reconcile.Result{}, nil
-	}
-	if trigger.Status.AcknowledgedGeneration < trigger.Generation {
-		trigger.Status.AcknowledgedGeneration = trigger.Generation
-		if err := r.client.Status().Update(ctx, trigger); err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-	if trigger.Status.SuccessfulGeneration < trigger.Generation &&
-		trigger.Status.FailedGeneration < trigger.Generation {
-		select {
-		case r.wake <- struct{}{}:
-		default:
-		}
-	}
-	return reconcile.Result{}, nil
-}
 
 // The singleton's spec and watermarks are the durable queue. A buffered wake is
 // only a hint to reread it, so coalescing and restart recovery need no request IDs.

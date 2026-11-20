@@ -200,7 +200,7 @@ spec:
         - name: manager
           args:
             - --audit-interval={{ .Values.auditInterval }}
-            - --enable-audit-trigger={{ .Values.enableAuditTrigger }}
+            - HELMSUBST_DEPLOYMENT_ENABLE_AUDIT_TRIGGER
             - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
             - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook }}{{ .Values.validatingWebhookName }}{{ end }}

@@ -968,6 +968,8 @@ func (am *Manager) readUnstructuredList(jsonBytes []byte) ([]unstructured.Unstru
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
+	ctx = logf.IntoContext(ctx, log)
+
 	var runner *auditTriggerRunner
 	if *enableAuditTrigger {
 		runner = &auditTriggerRunner{
@@ -1045,10 +1047,7 @@ func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, r
 			}
 		case <-retryC:
 			retryC = nil
-			select {
-			case am.auditTriggerWake <- struct{}{}:
-			default:
-			}
+			am.notifyAuditTrigger()
 		case <-triggerWake:
 			err := runner.run(ctx, true)
 			if err != nil {
@@ -1058,6 +1057,13 @@ func (am *Manager) runAuditLoop(ctx context.Context, tickerC <-chan time.Time, r
 				resetRetry()
 			}
 		}
+	}
+}
+
+func (am *Manager) notifyAuditTrigger() {
+	select {
+	case am.auditTriggerWake <- struct{}{}:
+	default:
 	}
 }
 

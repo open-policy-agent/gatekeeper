@@ -11,15 +11,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/gatekeeper/v3/apis"
 	auditv1alpha1 "github.com/open-policy-agent/gatekeeper/v3/apis/audit/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	exportutil "github.com/open-policy-agent/gatekeeper/v3/pkg/export/util"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/v3/test/testutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	controllerconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
@@ -57,18 +62,24 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 	apiClient, err := client.New(cfg, client.Options{Scheme: testScheme})
 	require.NoError(t, err)
 	for _, tt := range []struct {
-		name     string
-		enabled  bool
-		interval int64
+		name        string
+		enabled     bool
+		interval    int64
+		auditSource string
 	}{
 		{name: "disabled with zero interval"},
 		{name: "disabled periodic audit without trigger CRD", interval: 1},
-		{name: "enabled on-demand only", enabled: true},
-		{name: "enabled periodic audit reports failure", enabled: true, interval: 1},
+		{name: "enabled on-demand only", enabled: true, auditSource: "on-demand"},
+		{name: "enabled periodic audit reports failure", enabled: true, interval: 1, auditSource: "scheduled"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			*auditInterval, *enableAuditTrigger = tt.interval, tt.enabled
-			ctx := context.Background()
+			core, logs := observer.New(zap.InfoLevel)
+			baseLog := zapr.NewLogger(zap.New(core))
+			oldLog := log
+			log = baseLog.WithName("controller").WithValues(logging.Process, "audit")
+			t.Cleanup(func() { log = oldLog })
+			ctx := logf.IntoContext(context.Background(), baseLog)
 			trigger := &auditv1alpha1.AuditTrigger{
 				ObjectMeta: metav1.ObjectMeta{Name: auditv1alpha1.AuditTriggerName},
 				Spec:       auditv1alpha1.AuditTriggerSpec{AuditNonce: "gate-test"},
@@ -160,6 +171,22 @@ func TestAuditTriggerFeatureGate(t *testing.T) {
 			}, 15*time.Second, 20*time.Millisecond)
 			if !tt.enabled {
 				require.Zero(t, triggerCalls.Load(), "disabled audits must not access the trigger API")
+			}
+			require.Eventually(t, func() bool {
+				return logs.FilterField(zap.String(logging.EventType, "audit_finished")).Len() > 0
+			}, 15*time.Second, 20*time.Millisecond)
+			for _, eventType := range []string{"audit_started", "audit_finished"} {
+				entries := logs.FilterField(zap.String(logging.EventType, eventType)).All()
+				require.NotEmpty(t, entries)
+				for _, entry := range entries {
+					fields := entry.ContextMap()
+					require.Equal(t, "controller", entry.LoggerName)
+					require.Equal(t, "audit", fields[logging.Process])
+					require.NotEmpty(t, fields[logging.AuditID])
+					if tt.enabled {
+						require.Equal(t, tt.auditSource, fields["auditSource"])
+					}
+				}
 			}
 		})
 	}

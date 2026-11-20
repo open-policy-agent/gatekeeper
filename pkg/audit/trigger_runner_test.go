@@ -20,50 +20,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func TestAuditTriggerReconcile(t *testing.T) {
-	for _, tt := range []struct {
-		name       string
-		successful int64
-		failed     int64
-		wantWake   bool
-	}{
-		{name: "new request", wantWake: true},
-		{name: "success preserved", successful: 7},
-		{name: "failure requires new request", failed: 7},
-		{name: "newer request after failure", failed: 6, wantWake: true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			trigger := newAuditTrigger(7)
-			trigger.Status.SuccessfulGeneration = tt.successful
-			trigger.Status.FailedGeneration = tt.failed
-			c := newAuditTriggerClient(t, trigger)
-			wake := make(chan struct{}, 1)
-			r := &auditTriggerReconciler{client: c, wake: wake}
-			for range 2 {
-				_, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: auditTriggerKey})
-				require.NoError(t, err)
-			}
-			require.Equal(t, tt.wantWake, len(wake) == 1)
-			got := getAuditTrigger(t, c)
-			require.EqualValues(t, 7, got.Status.AcknowledgedGeneration)
-			require.Equal(t, tt.successful, got.Status.SuccessfulGeneration)
-			require.Equal(t, tt.failed, got.Status.FailedGeneration)
-		})
+func TestNotifyAuditTriggerCoalesces(t *testing.T) {
+	am := &Manager{auditTriggerWake: make(chan struct{}, 1)}
+	am.notifyAuditTrigger()
+	done := make(chan struct{})
+	go func() {
+		am.notifyAuditTrigger()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		<-am.auditTriggerWake
+		require.FailNow(t, "notification blocked on a full wake channel")
 	}
-}
-
-func TestAuditTriggerIgnoresNonSingleton(t *testing.T) {
-	trigger := newAuditTrigger(1)
-	trigger.Name = "other"
-	c := newAuditTriggerClient(t, trigger)
-	wake := make(chan struct{}, 1)
-	r := &auditTriggerReconciler{client: c, wake: wake}
-	_, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(trigger)})
-	require.NoError(t, err)
-	require.Empty(t, wake)
+	require.Len(t, am.auditTriggerWake, 1)
+	<-am.auditTriggerWake
+	am.notifyAuditTrigger()
+	require.Len(t, am.auditTriggerWake, 1)
 }
 
 func TestAuditTriggerRunCoalescesAndPreservesCompletion(t *testing.T) {
@@ -79,9 +55,9 @@ func TestAuditTriggerRunCoalescesAndPreservesCompletion(t *testing.T) {
 			require.Nil(t, running.CompletedAt)
 			require.EqualValues(t, 7, running.CoveredGeneration)
 			advanceAuditTrigger(t, c, 12)
-			reconciler := &auditTriggerReconciler{client: c, wake: make(chan struct{}, 1)}
-			_, err := reconciler.Reconcile(context.Background(), reconcile.Request{NamespacedName: auditTriggerKey})
-			require.NoError(t, err)
+			trigger := getAuditTrigger(t, c)
+			trigger.Status.AcknowledgedGeneration = 12
+			require.NoError(t, c.Status().Update(context.Background(), trigger))
 		}
 		return nil
 	})

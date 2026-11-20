@@ -16,6 +16,7 @@ import (
 	"context"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/audittrigger"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
@@ -43,7 +44,7 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		return err
 	}
 	if *enableAuditTrigger {
-		if err := addAuditTriggerController(m, am); err != nil {
+		if err := audittrigger.AddToManager(m, am.notifyAuditTrigger); err != nil {
 			return err
 		}
 	}
