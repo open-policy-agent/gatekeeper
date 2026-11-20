@@ -5,6 +5,110 @@ title: Audit
 
 Audit performs periodic evaluations of existing resources against constraints, detecting pre-existing misconfigurations.
 
+## Triggering an Audit
+
+On-demand audit is an alpha feature, disabled by default. Enable it on the audit process with
+`--enable-audit-trigger=true` (Helm: `enableAuditTrigger: true`) and install the `AuditTrigger` CRD
+and its RBAC permissions. Only set this flag or Helm value with an image that supports it.
+The chart and standard manifests include the CRD; its presence alone
+does not enable the feature. Static manifests include trigger permissions; Helm grants the explicit
+trigger permissions only when enabled.
+
+With the feature disabled, Gatekeeper does not register the trigger controller or read or write
+trigger status, and periodic audits do not depend on the trigger CRD. If the CRD is installed,
+requests can still be created but are not acknowledged or processed while disabled.
+Requests left pending are processed when the feature is enabled.
+
+With the feature disabled, periodic audits via API discovery support
+[scoped read permissions](operations.md#audit). If a group's resources cannot be discovered
+or the first LIST of a resource kind is forbidden, Gatekeeper logs the error and publishes
+results for the kinds it could audit. If a Namespace GET is forbidden, Gatekeeper skips objects
+whose namespace it could not read. Status and violation totals cover **only the readable scope**:
+for example, a wildcard constraint may report zero even if an unreadable object violates it.
+If no eligible kind could be audited, a Namespace denial prevented every object review, or another scan operation fails
+(for example, fetching a later page or a policy review returning an error), the previous
+statuses and violation totals are retained.
+
+Once enabled, an audit can be requested before the next configured audit interval by creating an `AuditTrigger`.
+Change `spec.auditNonce` to a fresh random UUID to request an audit as soon as possible.
+The nonce is only a change token: it is not an audit ID or a scheduling instruction.
+
+```yaml
+apiVersion: audit.gatekeeper.sh/v1alpha1
+kind: AuditTrigger
+metadata:
+  name: audit-trigger
+spec:
+  auditNonce: "c13ca135-c7bd-4ee4-94aa-9334505ad847"
+```
+
+`audit-trigger` is a singleton; other resource names are rejected. Save the `metadata.uid` and
+`metadata.generation` from the successful write response. Reapplying an unchanged nonce does not
+request another audit. When updating a full object, use `metadata.resourceVersion` and retry conflicts.
+
+For the generation `G` returned by your write, evaluate status in this order:
+
+1. If the UID changed, the singleton was recreated; submit a new request.
+2. If `status.successfulGeneration >= G`, the request is satisfied.
+3. If `status.failedGeneration >= G`, a covering audit failed; change the nonce to retry.
+4. Otherwise, wait. `status.acknowledgedGeneration >= G` means Gatekeeper accepted the request.
+
+Missing generation watermarks mean zero. Watermarks never decrease within the same object's lifetime.
+A later failure does not invalidate an earlier success. `status.lastRun` describes the most recently
+reported execution, regardless of what triggered it; clients use the generation watermarks to track requests.
+
+Run a single audit replica. `lastRun` is intended as a best-effort diagnostic rather than a contract the
+client can rely on: during rollout or restart overlap, `lastRun` may be overwritten out of order. Generation watermarks are guaranteed monotonic,
+hence the intended client behavior being to use those instead.
+
+Constraint-status writes reject audit timestamps older than the stored timestamp, and rejected publication fails the audit rather than reporting success. This check does not guarantee execution ordering across pods with different clocks.
+
+Success includes completion of constraint-status writes, but does not mean that no violations were
+found or that an external consumer uploaded the results.
+
+Trigger readers need not have access to every audited namespace. On failure, `lastRun.message`
+contains a reference instead of resource names or underlying errors. An operator can search
+the audit pod logs for that reference to see the cause.
+
+With the feature enabled, discovery, resource listing, disk spooling, and errors returned by
+policy review fail both scheduled and on-demand audits, even without a pending trigger request.
+An incomplete scan does not publish new constraint statuses or violation totals; the previous
+results are retained. Constraint-status writes are not atomic across constraints: a failure while
+writing a complete scan's results can leave some constraints updated, but does not advance the
+successful generation. A missing required ConstraintTemplate CRD also fails the audit.
+An absent constraint API is treated as an empty audit.
+Timing metrics and audit-finished logs/export messages mark the end of an attempt, including failed
+attempts; use the trigger's generation watermarks to determine success.
+Waiting for initial ingestion is not an audit attempt: these retries do not update run timing
+metrics, write an export, or evict an earlier export. A completed audit with no findings still does.
+Error collection retains at most ten diagnostic messages of up to 256 bytes each, plus an omission
+marker. Complete per-resource errors are logged rather than retained in the audit result.
+
+Multiple requests observed before an audit starts are coalesced into that audit. A request received
+during an audit requires a subsequent run; it is not silently skipped. A periodic audit can satisfy
+an already-observed request. Following a restart, requests without durable completion are rerun,
+so execution is at-least-once, not exactly-once. If constraints exist and the restarted audit
+process is still ingesting its initial policy or synced data, a pending request keeps its
+generation and retries automatically. No new nonce is needed. This uses Gatekeeper's
+[startup readiness expectations](customize-startup.md); it is not a guarantee that subsequent
+policy or resource updates have reached every cache when an audit starts.
+Cache-based audits (`--audit-from-cache=true`) wait for policy and synced data, but do not
+wait for expansion templates or mutators: they evaluate cached objects without expanding them.
+Discovery-based audits still wait for those inputs when resource expansion is enabled.
+This does not relax the pod's overall readiness check.
+
+A successful on-demand scan resets the periodic audit schedule even if its completion status
+cannot yet be persisted, so another audit will still start within the configured
+`--audit-interval`. Setting `--audit-interval=0` disables periodic audits; with the trigger feature
+enabled, audits can still be requested with an `AuditTrigger`. With both the feature disabled and
+the interval set to zero, auditing is fully disabled.
+
+If a completion cannot be persisted, Gatekeeper retains
+the highest successful and failed generations in memory and retries without blocking periodic scans.
+Failed periodic scans wait for the next configured interval; they do not schedule fast scan retries.
+Completion-status persistence failures from periodic runs use the same bookkeeping retry backoff
+as on-demand runs, without repeating the scan unless a new request needs one.
+
 ## Reading Audit Results
 
 There are three ways to gather audit results, depending on the level of detail needed.
@@ -157,7 +261,7 @@ number of instances to run, please refer to [operations audit](operations.md#aud
 
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`). NOTE: This flag only impacts when gathering audit results using the constraint status model. If you want to export audit results via other means, please refer to [the export guide](export.md). Both approaches for getting audit violations can be configured independently and work simultaneously without any interference.
 - Audit chunk size: set `--audit-chunk-size=400` (defaults to `500`, `0` = infinite) Lower chunk size can reduce memory consumption of the auditing `Pod` but can increase the number requests to the Kubernetes API server.
-- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable audit interval by setting `--audit-interval=0`
+- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable periodic audits by setting `--audit-interval=0`; `AuditTrigger` requests remain enabled.
 - Audit api server cache write to disk (Gatekeeper v3.7.0+): Starting from v3.7.0, by default, audit writes api server cache to the disk attached to the node. This reduces the memory consumption of the audit `pod`. If there are concerns with high IOPS, then switch audit to write cache to a tmpfs ramdisk instead. NOTE: write to ramdisk will increase memory footprint of the audit `pod`.  
   - helm install `--set audit.writeToRAMDisk=true` 
   - if not using helm, modify the deployment manifest to mount a ramdisk

@@ -14,6 +14,12 @@ patchesJson6902:
       group: apiextensions.k8s.io
       version: v1
       kind: CustomResourceDefinition
+      name: audittriggers.audit.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
       name: constrainttemplates.templates.gatekeeper.sh
     path: labels_patch.yaml
   - target:

@@ -210,9 +210,9 @@ deployed namespace is exempted.
 {{/*
 Returns "true" for true, t or 1 and "false" for false, f or 0, in any case.
 Unset, null or "" returns the default; other values are returned unchanged.
-Usage: include "gatekeeper.exportFlag" (dict "value" .Values.enableViolationExport "default" "true")
+Usage: include "gatekeeper.boolFlag" (dict "value" .Values.enableViolationExport "default" "true")
 */}}
-{{- define "gatekeeper.exportFlag" -}}
+{{- define "gatekeeper.boolFlag" -}}
 {{- $value := toString .value -}}
 {{- if or (kindIs "invalid" .value) (eq $value "") -}}
 {{- .default -}}
@@ -223,6 +223,18 @@ false
 {{- else -}}
 {{- $value -}}
 {{- end -}}
+{{- end -}}
+
+{{- define "gatekeeper.exportFlag" -}}
+{{- include "gatekeeper.boolFlag" . -}}
+{{- end -}}
+
+{{- define "gatekeeper.auditTriggerFlag" -}}
+{{- $flag := include "gatekeeper.boolFlag" (dict "value" .Values.enableAuditTrigger "default" "") -}}
+{{- if not (has $flag (list "" "true" "false")) -}}
+{{- fail "enableAuditTrigger must be a boolean" -}}
+{{- end -}}
+{{- $flag -}}
 {{- end -}}
 
 {{/*

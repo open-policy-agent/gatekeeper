@@ -16,6 +16,7 @@ import (
 	"context"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/audittrigger"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/export"
@@ -24,23 +25,29 @@ import (
 )
 
 type Dependencies struct {
-	Client          *constraintclient.Client
-	ProcessExcluder *process.Excluder
-	CacheLister     *CacheLister
-	ExpansionSystem *expansion.System
-	ExportSystem    *export.System
-	GetPod          func(context.Context) (*corev1.Pod, error)
+	Client           *constraintclient.Client
+	InitialDataReady func(fromCache bool) bool
+	ProcessExcluder  *process.Excluder
+	CacheLister      *CacheLister
+	ExpansionSystem  *expansion.System
+	ExportSystem     *export.System
+	GetPod           func(context.Context) (*corev1.Pod, error)
 }
 
 // AddToManager adds audit manager to the Manager.
 func AddToManager(m manager.Manager, deps *Dependencies) error {
-	if *auditInterval == 0 {
+	if !*enableAuditTrigger && *auditInterval == 0 {
 		log.Info("auditing is disabled")
 		return nil
 	}
 	am, err := New(m, deps)
 	if err != nil {
 		return err
+	}
+	if *enableAuditTrigger {
+		if err := audittrigger.AddToManager(m, am.notifyAuditTrigger); err != nil {
+			return err
+		}
 	}
 	return m.Add(am)
 }

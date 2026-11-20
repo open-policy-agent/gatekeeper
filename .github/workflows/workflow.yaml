@@ -228,6 +228,7 @@ jobs:
             HELM_RELEASE=latest \
             HELM_VERSION=${{ matrix.HELM_VERSION }} \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
+            ENABLE_AUDIT_TRIGGER=true \
             GENERATE_VAP=true \
             GENERATE_VAPBINDING=true \
             SYNC_VAP_ENFORCEMENT_SCOPE=true \
@@ -236,6 +237,7 @@ jobs:
             LOG_LEVEL=DEBUG
 
           make test-e2e \
+            BATS_TESTS_FILE="test/bats/test.bats test/bats/vap_scope.bats test/bats/audit_trigger.bats" \
             GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} \
             ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS=${{ matrix.ADMISSION_AUDIT_ANNOTATIONS_INCLUDE_SUCCESS }} \
             ENABLE_VAP_TESTS=1 \

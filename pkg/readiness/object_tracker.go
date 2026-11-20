@@ -56,6 +56,7 @@ type Expectations interface {
 type objectTracker struct {
 	mu            sync.RWMutex
 	gvk           schema.GroupVersionKind
+	listKind      string                    // response kind for collection; synced CRDs can set spec.names.listKind
 	canceled      objSet                    // expectations that have been canceled
 	expect        objSet                    // unresolved expectations
 	tryCanceled   objRetrySet               // tracks TryCancelExpect calls, decrementing allotted retries for an object
@@ -74,6 +75,7 @@ func newObjTracker(gvk schema.GroupVersionKind, fn objDataFactory) *objectTracke
 
 	return &objectTracker{
 		gvk:          gvk,
+		listKind:     gvk.Kind + "List",
 		canceled:     make(objSet),
 		expect:       make(objSet),
 		tryCanceled:  make(objRetrySet),
@@ -99,7 +101,7 @@ func (t *objectTracker) Expect(o runtime.Object) {
 		return
 	}
 
-	k, err := objKeyFromObject(o)
+	k, err := t.keyFor(o)
 	if err != nil {
 		log.Error(err, "skipping")
 		return
@@ -146,7 +148,7 @@ func (t *objectTracker) CancelExpect(o runtime.Object) {
 		return
 	}
 
-	k, err := objKeyFromObject(o)
+	k, err := t.keyFor(o)
 	if err != nil {
 		log.Error(err, "skipping")
 		return
@@ -167,7 +169,7 @@ func (t *objectTracker) TryCancelExpect(o runtime.Object) bool {
 		return false
 	}
 
-	k, err := objKeyFromObject(o)
+	k, err := t.keyFor(o)
 	if err != nil {
 		log.Error(err, "skipping")
 		return false
@@ -225,7 +227,7 @@ func (t *objectTracker) Observe(o runtime.Object) {
 		return
 	}
 
-	k, err := objKeyFromObject(o)
+	k, err := t.keyFor(o)
 	if err != nil {
 		log.Error(err, "skipping")
 		return
@@ -375,16 +377,16 @@ func (t *objectTracker) kindsNoLock() []schema.GroupVersionKind {
 	return out
 }
 
-// objKeyFromObject constructs an objKey representing the provided runtime.Object.
-func objKeyFromObject(obj runtime.Object) (objKey, error) {
+func (t *objectTracker) keyFor(obj runtime.Object) (objKey, error) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		return objKey{}, err
 	}
 
-	// Index ConstraintTemplates by their corresponding constraint GVK.
-	// This will be leveraged in tracker.Satisfied().
-	var gvk schema.GroupVersionKind
+	// Typed objects need not carry TypeMeta. Use the tracker's kind so an
+	// initial typed LIST and an unstructured relist produce the same key.
+	gvk := t.gvk
+	// ConstraintTemplates are indexed by their corresponding constraint GVK.
 	switch v := obj.(type) {
 	case *templates.ConstraintTemplate:
 		gvk = schema.GroupVersionKind{
@@ -414,24 +416,20 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 		ugvk := obj.GetObjectKind().GroupVersionKind()
 		if ugvk.GroupVersion() == v1beta1.SchemeGroupVersion && ugvk.Kind == "ConstraintTemplate" {
 			cKind, found, err := unstructured.NestedString(v.Object, "spec", "crd", "spec", "names", "kind")
-			if !found || err != nil {
-				return objKey{}, errors.Wrapf(err, "retrieving nested CRD Kind field for unstructured. Found: %v Object: %v", found, obj)
+			if err != nil {
+				return objKey{}, errors.Wrapf(err, "retrieving constraint kind from ConstraintTemplate %q", v.GetName())
+			}
+			if !found || cKind == "" {
+				return objKey{}, fmt.Errorf("ConstraintTemplate %q is missing its constraint kind", v.GetName())
 			}
 			gvk = schema.GroupVersionKind{
 				Group:   constraintGroup,
 				Version: v1beta1.SchemeGroupVersion.Version,
 				Kind:    cKind,
 			}
-		} else {
+		} else if !ugvk.Empty() {
 			gvk = ugvk
 		}
-	default:
-		// unfortunately gvk is not always populated by kubernetes, we would need access
-		// to the scheme to make an educated guess on the conversion between K8s struct
-		// and GVK. Fortunately, if we aren't talking about constraints/templates, there
-		// is no parent/child relationship, and all other object trackers already index
-		// by gvk
-		gvk = schema.GroupVersionKind{}
 	}
 
 	nn := types.NamespacedName{Namespace: accessor.GetNamespace(), Name: accessor.GetName()}
