@@ -6,14 +6,122 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: benchmark-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
+  prepare:
+    name: "Prepare benchmark"
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.body == '/benchmark' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: oracle-vm-2cpu-8gb-x86-64
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      base_sha: ${{ steps.prepare.outputs.base_sha }}
+      head_sha: ${{ steps.prepare.outputs.head_sha }}
+      head_repo: ${{ steps.prepare.outputs.head_repo }}
+      comment_id: ${{ steps.prepare.outputs.comment_id }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: Check out workflow helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Resolve PR snapshots and create status comment
+        id: prepare
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            await require('./.github/scripts/benchmark.js').prepare({github, context, core});
+
   benchmark:
     name: "Benchmark"
-    if: github.event.issue.pull_request && github.event.comment.body == '/benchmark'
+    needs: prepare
     runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 60
     permissions:
-      contents: write
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: Check out workflow helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: workflow
+          persist-credentials: false
+
+      - name: Check out base snapshot
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Set up Go for base snapshot
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: base/go.mod
+          cache: false
+
+      - name: Run benchmarks on base snapshot
+        run: bash workflow/.github/scripts/run-benchmark.sh base "$GITHUB_WORKSPACE/base_benchmarks.txt"
+
+      - name: Check out PR snapshot
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ needs.prepare.outputs.head_repo }}
+          ref: ${{ needs.prepare.outputs.head_sha }}
+          path: pr
+          persist-credentials: false
+
+      - name: Set up Go for PR snapshot
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: pr/go.mod
+          cache: false
+
+      - name: Run benchmarks on PR snapshot
+        run: bash workflow/.github/scripts/run-benchmark.sh pr "$GITHUB_WORKSPACE/pr_benchmarks.txt"
+
+      - name: Compare benchmarks
+        run: |
+          GOBIN="$RUNNER_TEMP/benchstat" go install golang.org/x/perf/cmd/benchstat@v0.0.0-20220920022801-e8d778a60d07
+          "$RUNNER_TEMP/benchstat/benchstat" base_benchmarks.txt pr_benchmarks.txt > benchstat.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchmark-results
+          if-no-files-found: error
+          path: |
+            base_benchmarks.txt
+            pr_benchmarks.txt
+            benchstat.txt
+
+  report:
+    name: "Report benchmark"
+    needs: [prepare, benchmark]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: oracle-vm-2cpu-8gb-x86-64
+    timeout-minutes: 5
+    permissions:
+      contents: read
       pull-requests: write
     steps:
       - name: Harden Runner
@@ -21,51 +129,29 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: izhangzhihao/delete-comment@98aa1ea5c6304048edf951c20b3114e03c785c79
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          delete_user_name: github-actions[bot]
-          issue_number: ${{ github.event.issue.number }}
-
-      - name: Update status
-        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          body: |
-            [Running benchmark here...](${{ github.server.url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-      - name: Check out base code into the Go module directory
+      - name: Check out workflow helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.base_ref }}
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
-      - name: Run benchmarks on base ref
-        run: make benchmark-test BENCHMARK_FILE_NAME="../base_benchmarks.txt"
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Run benchmark with incoming changes
-        run: make benchmark-test BENCHMARK_FILE_NAME="pr_benchmarks.txt"
-
-      - name: Compare benchmarks
-        id: get-comment-body
-        run: |
-          export GOPATH="$HOME/go"
-          PATH="$GOPATH/bin:$PATH"
-          go install golang.org/x/perf/cmd/benchstat@v0.0.0-20220920022801-e8d778a60d07
-          benchstat ../base_benchmarks.txt pr_benchmarks.txt > benchstat.txt
-          delimiter=$(openssl rand -hex 8)
-          echo 'msg<<$delimiter' >> $GITHUB_OUTPUT
-          cat benchstat.txt >> $GITHUB_OUTPUT
-          echo '$delimiter' >> $GITHUB_OUTPUT
-
-      - name: Create commit comment
-        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      - name: Download benchmark results
+        id: download
+        if: needs.benchmark.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          issue-number: ${{ github.event.issue.number }}
-          body: |
-            This PR compares its performance to the latest released version. If it performs significantly lower, consider optimizing your changes to improve the performance.
-            ```
-            ${{ steps.get-comment-body.outputs.msg }}
-            ```
+          name: benchmark-results
+          path: results
+
+      - name: Update benchmark status comment
+        if: always()
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          COMMENT_ID: ${{ needs.prepare.outputs.comment_id }}
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
+          BENCHMARK_RESULT: ${{ needs.benchmark.result }}
+          DOWNLOAD_RESULT: ${{ steps.download.outcome }}
+        with:
+          script: |
+            await require('./.github/scripts/benchmark.js').report({github, context, core});

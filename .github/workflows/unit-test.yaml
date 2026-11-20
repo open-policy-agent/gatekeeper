@@ -39,6 +39,14 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      - name: Test benchmark workflow helpers
+        run: node --test .github/scripts/benchmark.test.js
+
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -88,31 +96,3 @@ jobs:
 
       - name: Race test
         run: make native-race-test
-
-  bench-test:
-    name: "Benchmarks"
-    runs-on: oracle-vm-4cpu-16gb-x86-64
-    timeout-minutes: 10
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
-        with:
-          egress-policy: audit
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          check-latest: true
-
-      - name: Cache envtest binaries
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .tmp/bin/
-          key: envtest-${{ runner.os }}-k8s-${{ hashFiles('Makefile') }}
-
-      - name: Benchmark test
-        run: make native-bench-test
