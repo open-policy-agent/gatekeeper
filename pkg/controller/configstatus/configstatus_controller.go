@@ -195,7 +195,7 @@ func (r *ReconcileConfigStatus) Reconcile(ctx context.Context, request reconcile
 	cfg.Status.ByPod = s
 
 	if err := r.statusClient.Status().Update(ctx, cfg); err != nil {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }

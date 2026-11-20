@@ -136,7 +136,7 @@ func (r *ReconcileSyncSet) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if err := r.cacheManager.UpsertSource(ctx, sk, gvks); err != nil {
 		syncsetTr.TryCancelExpect(syncset)
-		return reconcile.Result{Requeue: true}, fmt.Errorf("syncset-controller: error upserting watches: %w", err)
+		return reconcile.Result{}, fmt.Errorf("syncset-controller: error upserting watches: %w", err)
 	}
 
 	syncsetTr.Observe(syncset)
