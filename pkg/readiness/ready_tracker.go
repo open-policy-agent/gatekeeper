@@ -617,7 +617,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 func (t *Tracker) trackAssignMetadata(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadError {
 			t.assignMetadata.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("AssignMetadata expectations populated")
@@ -650,7 +650,7 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context, errChan chan<- error)
 func (t *Tracker) trackAssign(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadError {
 			t.assign.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("Assign expectations populated")
@@ -683,7 +683,7 @@ func (t *Tracker) trackAssign(ctx context.Context, errChan chan<- error) {
 func (t *Tracker) trackModifySet(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadError {
 			t.modifySet.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("ModifySet expectations populated")
@@ -716,7 +716,7 @@ func (t *Tracker) trackModifySet(ctx context.Context, errChan chan<- error) {
 func (t *Tracker) trackAssignImage(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadError {
 			t.assignImage.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("AssignImage expectations populated")
@@ -749,7 +749,7 @@ func (t *Tracker) trackAssignImage(ctx context.Context, errChan chan<- error) {
 func (t *Tracker) trackExpansionTemplates(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadError {
 			t.expansions.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("ExpansionTemplate expectations populated")
@@ -782,7 +782,7 @@ func (t *Tracker) trackExpansionTemplates(ctx context.Context, errChan chan<- er
 func (t *Tracker) trackExternalDataProvider(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadError {
 			t.externalDataProvider.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("Provider expectations populated")
@@ -815,7 +815,7 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context, errChan chan<- 
 func (t *Tracker) trackConstraintTemplates(ctx context.Context, errChan chan<- error) {
 	hadError := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadError {
 			t.templates.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("template expectations populated")
@@ -867,7 +867,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context, errChan chan<- e
 func (t *Tracker) trackConfigAndSyncSets(ctx context.Context, errChan chan<- error) {
 	hadErr := false
 	defer func() {
-		// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+		// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 		if !t.crashOnFailure || !hadErr {
 			t.config.ExpectationsDone()
 			log.V(logging.DebugLevel).Info("config expectations populated")
@@ -977,7 +977,7 @@ func (t *Tracker) makeDataTrackerFor(gvk schema.GroupVersionKind, dt Expectation
 	return func(ctx context.Context, errChan chan<- error) {
 		hadError := false
 		defer func() {
-			// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+			// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 			if !t.crashOnFailure || !hadError {
 				dt.ExpectationsDone()
 				log.V(logging.DebugLevel).Info("data expectations populated", "gvk", gvk)
@@ -1026,7 +1026,7 @@ func (t *Tracker) makeConstraintTrackerFor(gvk schema.GroupVersionKind, constrai
 	return func(ctx context.Context, errChan chan<- error) {
 		hadError := false
 		defer func() {
-			// If we are ignoring errors when tracking expecations, we need to set expectations to done to prevent readiness tracker never being satisfied
+			// If we are ignoring errors when tracking expectations, we need to set expectations to done to prevent readiness tracker never being satisfied
 			if !t.crashOnFailure || !hadError {
 				constraints.ExpectationsDone()
 				log.V(logging.DebugLevel).Info("constraint expectations populated", "gvk", gvk)

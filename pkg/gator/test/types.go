@@ -75,7 +75,7 @@ func (r *GatorResponses) Results() []*GatorResult {
 	return res
 }
 
-// YamlGatorResult is a GatorResult minues a level of indirection on
+// YamlGatorResult is a GatorResult minus a level of indirection on
 // the ViolatingObject and with struct tags for yaml marshaling.
 type YamlGatorResult struct {
 	types.Result
