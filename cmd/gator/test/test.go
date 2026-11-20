@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -31,6 +32,9 @@ gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
 # Receive input from stdin
 cat manifest.yaml | gator test
 
+# Evaluate policies that use external data
+gator test --filename="manifest.yaml" --enable-external-data --external-data-providers="providers.yaml"
+
 # Output structured violations data
 gator test --filename="manifest.yaml" --output=json`
 )
@@ -44,16 +48,18 @@ var Cmd = &cobra.Command{
 }
 
 var (
-	flagFilenames    []string
-	flagOutput       string
-	flagIncludeTrace bool
-	flagGatherStats  bool
-	flagImages       []string
-	flagPlainHTTP    bool
-	flagTempDir      string
-	flagEnableK8sCel bool
-	flagDenyOnly     bool
-	flagVerbose      bool
+	flagFilenames             []string
+	flagOutput                string
+	flagIncludeTrace          bool
+	flagGatherStats           bool
+	flagImages                []string
+	flagPlainHTTP             bool
+	flagTempDir               string
+	flagEnableK8sCel          bool
+	flagDenyOnly              bool
+	flagVerbose               bool
+	flagEnableExternalData    bool
+	flagExternalDataProviders []string
 )
 
 var flagDefaultFailurePolicyForK8sNativeValidation string
@@ -85,16 +91,35 @@ func init() {
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 	Cmd.Flags().BoolVarP(&flagDenyOnly, "deny-only", "", false, "output only denied constraints")
 	Cmd.Flags().BoolVarP(&flagVerbose, flagNameVerbose, "v", false, "print extended test output")
+	Cmd.Flags().BoolVar(&flagEnableExternalData, "enable-external-data", false, "allow external_data() to contact explicitly configured HTTPS Providers")
+	Cmd.Flags().StringArrayVar(&flagExternalDataProviders, "external-data-providers", nil, "trusted file or directory containing Provider resources; may be specified multiple times; requires --enable-external-data")
 }
 
 func run(_ *cobra.Command, _ []string) {
+	if err := validateExternalDataFlags(flagEnableExternalData, flagExternalDataProviders); err != nil {
+		cmdutils.ErrFatalf("%v", err)
+	}
 	if err := celSchema.SetDefaultFailurePolicyForK8sNativeValidation(flagDefaultFailurePolicyForK8sNativeValidation); err != nil {
 		cmdutils.ErrFatalf("invalid default K8sNativeValidation failure policy: %v", err)
+	}
+
+	var opts []gator.Opt
+	if flagEnableExternalData {
+		providers, err := reader.ReadProviders(flagExternalDataProviders)
+		if err != nil {
+			cmdutils.ErrFatalf("reading external data Providers: %v", err)
+		}
+		opts = append(opts, gator.WithExternalDataProviders(providers...))
 	}
 
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir, flagPlainHTTP)
 	if err != nil {
 		cmdutils.ErrFatalf("reading: %v", err)
+	}
+	if flagEnableExternalData {
+		if err := rejectProviders(unstrucs); err != nil {
+			cmdutils.ErrFatalf("reading: %v", err)
+		}
 	}
 	if len(unstrucs) == 0 {
 		cmdutils.ErrFatalf("no input data identified")
@@ -102,7 +127,6 @@ func run(_ *cobra.Command, _ []string) {
 
 	printBuf := gator.NewPrintBuffer(gator.DefaultPrintBufferLimit)
 
-	var opts []gator.Opt
 	if flagIncludeTrace {
 		opts = append(opts, test.WithTrace())
 	}
@@ -135,6 +159,32 @@ func run(_ *cobra.Command, _ []string) {
 		exitCode = 1
 	}
 	os.Exit(exitCode)
+}
+
+func validateExternalDataFlags(enabled bool, paths []string) error {
+	if enabled && len(paths) == 0 {
+		return fmt.Errorf("--enable-external-data requires --external-data-providers")
+	}
+	if !enabled && len(paths) > 0 {
+		return fmt.Errorf("--external-data-providers requires --enable-external-data=true")
+	}
+	for _, path := range paths {
+		if path == "" {
+			return fmt.Errorf("--external-data-providers path must not be empty")
+		}
+	}
+	return nil
+}
+
+// rejectProviders returns an error if objs contains a Provider. Providers are
+// read only from --external-data-providers.
+func rejectProviders(objs []*unstructured.Unstructured) error {
+	for _, obj := range objs {
+		if reader.IsProvider(obj) {
+			return fmt.Errorf("provider %q found in --filename, --image, or stdin input; Providers are read only from --external-data-providers, so move Provider files to a separate directory", obj.GetName())
+		}
+	}
+	return nil
 }
 
 func formatOutput(flagOutput string, allResults []*test.GatorResult, stats []*instrumentation.StatsEntry) string {
