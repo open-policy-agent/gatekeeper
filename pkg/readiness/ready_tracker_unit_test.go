@@ -182,6 +182,35 @@ func mustInitializeScheme(scheme *runtime.Scheme) *runtime.Scheme {
 }
 
 // Verify that TryCancelTemplate functions the same as regular CancelTemplate if readinessRetries is set to 0.
+// A ConstraintTemplate without a constraint kind cannot be keyed. It must not
+// stop collectForObjectTracker from canceling the expectation of a template
+// that was deleted before the controller loaded it.
+func Test_Tracker_collectForObjectTracker_SkipsObjectWithoutKey(t *testing.T) {
+	keyless := &unstructured.Unstructured{}
+	keyless.SetGroupVersionKind(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"))
+	keyless.SetName("no-kind")
+
+	lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(keyless).Build()
+	rt := newTracker(lister, false, false, false, false, nil, func() objData {
+		return objData{retries: 0}
+	})
+
+	// The template of the expectation is not in the cluster, as if it had been
+	// deleted before the controller loaded it.
+	rt.templates.Expect(convertedTemplate.DeepCopyObject())
+	rt.templates.ExpectationsDone()
+	if rt.templates.Satisfied() {
+		t.Fatal("templates tracker should not be satisfied before the collection")
+	}
+
+	if err := rt.collectForObjectTracker(context.Background(), rt.templates, nil, "ConstraintTemplate"); err != nil {
+		t.Fatalf("collectForObjectTracker() error = %v, want nil", err)
+	}
+	if !rt.templates.Satisfied() {
+		t.Error("the expectation of the deleted template should have been canceled")
+	}
+}
+
 func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	lister := fake.NewClientBuilder().WithScheme(mustInitializeScheme(runtime.NewScheme())).WithRuntimeObjects(convertedTemplate.DeepCopyObject()).Build()
 	wrapLister := WrapFakeClientWithMutex{fakeLister: lister}

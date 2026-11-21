@@ -539,7 +539,11 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, 
 		}
 		k, err := ot.keyFor(o)
 		if err != nil {
-			return errors.Wrapf(err, "while getting key for %v %q", gvk, o.GetName())
+			// An object that cannot be keyed is not one of the unsatisfied
+			// expectations, so it must not stop the other deleted objects from
+			// being collected.
+			log.Error(err, "skipping object without a key in collectForObjectTracker", "name", o.GetName(), "namespace", o.GetNamespace(), "gvk", gvk, "tracker", trackerName)
+			continue
 		}
 		// delete is a no-op if the key isn't found
 		delete(unsatisfiedmap, k)
