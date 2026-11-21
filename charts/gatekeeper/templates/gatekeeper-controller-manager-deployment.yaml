@@ -67,6 +67,8 @@ spec:
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         {{ if hasKey .Values "emitAdmissionEvents" }}- --emit-admission-events={{ .Values.emitAdmissionEvents }}{{- end }}
+        {{ if hasKey .Values "emitAdmissionAuditAnnotations" }}- --emit-admission-audit-annotations={{ .Values.emitAdmissionAuditAnnotations }}{{- end }}
+        {{ if hasKey .Values "admissionAuditAnnotationsIncludeSuccess" }}- --admission-audit-annotations-include-success={{ .Values.admissionAuditAnnotationsIncludeSuccess }}{{- end }}
         {{ if hasKey .Values "logStatsAdmission" }}- --log-stats-admission={{ .Values.logStatsAdmission }}{{- end }}
         - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace
           }}
@@ -82,6 +84,10 @@ spec:
         {{- if not .Values.controllerManager.disableGenerateOperation }}
         - --operation=generate
         {{- end }}
+        {{ with include "gatekeeper.exportFlag" (dict "value" .Values.enableAdmissionViolationExport "default" "") }}{{ if and (eq . "true") (ne ($.Values.exportBackend | default "" | lower) "disk") }}{{ fail "enableAdmissionViolationExport requires exportBackend to be disk" }}{{ end }}- --enable-admission-violation-export={{ . }}{{ if eq . "true" }}
+        - --audit-connection={{ $.Values.audit.connection }}
+        - --audit-channel={{ $.Values.audit.channel }}
+  {{- end }}{{- end }}
         - --enable-external-data={{ .Values.enableExternalData }}
         - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
           }}
@@ -91,14 +97,18 @@ spec:
           }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
-        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName
-          }}
+        - --validating-webhook-configuration-name={{ if not .Values.disableValidatingWebhook
+          }}{{ .Values.validatingWebhookName }}{{ end }}
         {{ if .Values.additionalValidatingWebhookConfigsToRotateCerts | empty | not }}- --additional-validating-webhook-configs-to-rotate-certs={{ .Values.additionalValidatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         {{ if .Values.additionalMutatingWebhookConfigsToRotateCerts | empty | not }}- --additional-mutating-webhook-configs-to-rotate-certs={{ .Values.additionalMutatingWebhookConfigsToRotateCerts | join "," }}{{- end }}
         - --external-data-provider-response-cache-ttl={{ .Values.externaldataProviderResponseCacheTTL
           }}
         - --enable-k8s-native-validation={{ .Values.enableK8sNativeValidation }}
+
+        {{- if hasKey .Values "defaultK8sNativeValidationFailurePolicy"}}
+        - --default-k8s-native-validation-failure-policy={{ .Values.defaultK8sNativeValidationFailurePolicy }}
+        {{- end }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
@@ -146,6 +156,10 @@ spec:
         
         {{- if hasKey .Values "defaultCreateVAPBindingForConstraints"}}
         - --default-create-vap-binding-for-constraints={{ .Values.defaultCreateVAPBindingForConstraints }}
+        {{- end }}
+
+        {{- if hasKey .Values "vapGenerationMode"}}
+        - --vap-generation-mode={{ .Values.vapGenerationMode }}
         {{- end }}
         
         {{- if hasKey .Values "defaultWaitForVAPBGeneration"}}
@@ -219,9 +233,26 @@ spec:
           {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
         {{- include "gatekeeper.extraVolumeMounts" . | nindent 8 }}
+        {{- if and (eq (include "gatekeeper.exportFlag" (dict "value" .Values.enableAdmissionViolationExport "default" "false")) "true") (eq (.Values.exportBackend | default "" | lower) "disk") }}
+        - mountPath: {{ .Values.audit.exportVolumeMount.path }}
+          name: {{ .Values.audit.exportVolume.name }}
+        {{- end }}
         - mountPath: /certs
           name: cert
           readOnly: true
+      {{- if and (eq (include "gatekeeper.exportFlag" (dict "value" .Values.enableAdmissionViolationExport "default" "false")) "true") (eq (.Values.exportBackend | default "" | lower) "disk") (not .Values.admission.disableExportSidecar) }}
+      {{- $admissionSidecar := deepCopy .Values.admission.exportSidecar }}
+      {{- $_ := set $admissionSidecar "volumeMounts" (list (dict "mountPath" .Values.audit.exportVolumeMount.path "name" .Values.audit.exportVolume.name)) }}
+      {{- $admissionEnv := list }}
+      {{- range $env := ($admissionSidecar.env | default (list)) }}
+      {{- if ne $env.name "ROOT_PATH" }}
+      {{- $admissionEnv = append $admissionEnv $env }}
+      {{- end }}
+      {{- end }}
+      {{- $admissionEnv = append $admissionEnv (dict "name" "ROOT_PATH" "value" .Values.audit.exportConnection.path) }}
+      {{- $_ := set $admissionSidecar "env" $admissionEnv }}
+      - {{ toYaml $admissionSidecar | nindent 8 }}
+      {{- end }}
       dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
@@ -241,6 +272,9 @@ spec:
         {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
       volumes:
       {{- include "gatekeeper.extraVolumes" . | nindent 6 }}
+      {{- if and (eq (include "gatekeeper.exportFlag" (dict "value" .Values.enableAdmissionViolationExport "default" "false")) "true") (eq (.Values.exportBackend | default "" | lower) "disk") }}
+      - {{- toYaml .Values.audit.exportVolume | nindent 8 }}
+      {{- end }}
       - name: cert
         secret:
           defaultMode: 420
