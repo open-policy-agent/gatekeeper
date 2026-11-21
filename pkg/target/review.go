@@ -14,13 +14,15 @@ type AugmentedReview struct {
 	Namespace        *corev1.Namespace
 	Source           types.SourceType
 	IsAdmission      bool
+	EnforcementPoint string
 }
 
 type gkReview struct {
 	admissionv1.AdmissionRequest
-	namespace   *corev1.Namespace
-	source      types.SourceType
-	isAdmission bool
+	namespace          *corev1.Namespace
+	source             types.SourceType
+	isAdmission        bool
+	enforcementPoint   string
 
 	// parsedObjects is request-local state shared by per-constraint Match calls.
 	// It avoids repeatedly unmarshalling the same AdmissionReview payload while
