@@ -278,7 +278,11 @@ controllerManager:
     ingress: []
       # - from:
       #   - ipBlock:
-      #       cidr: 0.0.0.0/0
+      #       cidr: 0.0.0.0/0  # Replace with your API server CIDR
+      #   ports:
+      #     - protocol: TCP
+      #       port: 8443
+      # See website/docs/failing-closed.md for tested examples and verification steps
   disableWebhookOperation: false
   disableGenerateOperation: true
 admission:
