@@ -258,8 +258,9 @@ The 64 KiB limit applies to the complete JSON object produced by
 `json.Marshal(ExportMsg)`, not only to `message`. Field names and JSON escaping,
 policy-provided details, constraint annotations, resource labels, and request
 identity all consume the same byte budget. KiB measures encoded bytes rather
-than characters. This leaves room for normal policy and request metadata while
-ensuring one user-influenced result cannot consume a disproportionate share of
+than characters. This limit is intentionally conservative: it is large enough
+for ordinary policy messages, common annotations, and request metadata, but
+small enough to keep one oversized or user-controlled result from monopolizing
 the 16 MiB queue or disk spool. Records over the limit are dropped before
 enqueue with reason `message_too_large`.
 
