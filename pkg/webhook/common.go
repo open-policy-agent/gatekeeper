@@ -17,6 +17,7 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -159,29 +160,23 @@ func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest
 		return false, nil
 	}
 
-	var data []byte
-	if req.Operation == admissionv1.Delete {
+	if req.Operation == admissionv1.Delete && req.OldObject.Raw == nil {
 		// oldObject is the existing object.
 		// It is null for DELETE operations in API servers prior to v1.15.0.
 		// https://github.com/kubernetes/website/pull/14671
-		if req.OldObject.Raw == nil {
-			return false, errOldObjectIsNil
-		}
-
-		// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
-		// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
-		// object is the new object being admitted.
-		// It is null for DELETE operations.
-		// https://github.com/kubernetes/kubernetes/pull/76346
-		data = req.OldObject.Raw
-	} else {
-		data = req.Object.Raw
+		return false, errOldObjectIsNil
 	}
 
+	// IsNamespaceExcluded reads only the object's kind, name and namespace, and
+	// the request already carries all three. Decoding the object here would cost
+	// a full unmarshal of the resource on every admission request.
 	obj := &unstructured.Unstructured{}
-	if _, _, err := deserializer.Decode(data, nil, obj); err != nil {
-		return false, err
-	}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   req.Kind.Group,
+		Version: req.Kind.Version,
+		Kind:    req.Kind.Kind,
+	})
+	obj.SetName(req.Name)
 	obj.SetNamespace(req.Namespace)
 
 	isNamespaceExcluded, err := h.processExcluder.IsNamespaceExcluded(excludedProcess, obj)

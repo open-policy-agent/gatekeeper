@@ -509,7 +509,9 @@ func TestReviewRequestExpandedResourcesPreserveOperation(t *testing.T) {
 	}
 }
 
-func TestSkipExcludedNamespaceSkipsDecodeWhenNoExclusions(t *testing.T) {
+func TestSkipExcludedNamespaceDoesNotDecodeObject(t *testing.T) {
+	// The request carries the kind, the name and the namespace, so a malformed
+	// body must not turn into an error here.
 	req := &admissionv1.AdmissionRequest{
 		Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
 		Name:      "malformed",
@@ -529,8 +531,42 @@ func TestSkipExcludedNamespaceSkipsDecodeWhenNoExclusions(t *testing.T) {
 		Processes:          []string{string(process.Webhook)},
 	}})
 	handler.processExcluder = excluder
-	_, err = handler.skipExcludedNamespace(req, process.Webhook)
-	require.Error(t, err)
+	excluded, err = handler.skipExcludedNamespace(req, process.Webhook)
+	require.NoError(t, err)
+	require.True(t, excluded)
+}
+
+func TestSkipExcludedNamespaceMatchesNamespaceObjectsByName(t *testing.T) {
+	excluder := process.New()
+	excluder.Add([]v1alpha1.MatchEntry{{
+		ExcludedNamespaces: []wildcard.Wildcard{"ns-*"},
+		Processes:          []string{string(process.Webhook)},
+	}})
+
+	handler := webhookHandler{processExcluder: excluder}
+
+	namespace := &admissionv1.AdmissionRequest{
+		Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"},
+		Name:      "ns-excluded",
+		Operation: admissionv1.Create,
+		Object:    runtime.RawExtension{Raw: []byte("{}")},
+	}
+
+	excluded, err := handler.skipExcludedNamespace(namespace, process.Webhook)
+	require.NoError(t, err)
+	require.True(t, excluded, "a Namespace object must be matched by its own name")
+
+	pod := &admissionv1.AdmissionRequest{
+		Kind:      metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+		Name:      "ns-excluded",
+		Namespace: "ordinary",
+		Operation: admissionv1.Create,
+		Object:    runtime.RawExtension{Raw: []byte("{}")},
+	}
+
+	excluded, err = handler.skipExcludedNamespace(pod, process.Webhook)
+	require.NoError(t, err)
+	require.False(t, excluded, "a namespaced object must be matched by its namespace, not its name")
 }
 
 func TestExpandRequestSkipsDecodeWhenNoTemplateCanMatch(t *testing.T) {
