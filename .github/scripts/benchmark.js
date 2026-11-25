@@ -48,8 +48,15 @@ async function report({github, context, core, env = process.env, reportPath = "r
   const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
   let body = `Base: \`${env.BASE_SHA}\`\nPR: \`${env.HEAD_SHA}\`\n\n[Workflow run](${runUrl})\n\n`;
   if (env.BENCHMARK_RESULT === "success" && env.DOWNLOAD_RESULT === "success") {
-    const results = fs.readFileSync(reportPath, "utf8");
-    if (!results.trim()) {
+    let results;
+    try {
+      results = fs.readFileSync(reportPath, "utf8");
+    } catch (error) {
+      core.setFailed(`Could not read the benchmark report: ${error.message}`);
+    }
+    if (results === undefined) {
+      body += "The benchmark report could not be read. See the workflow run for details.";
+    } else if (!results.trim()) {
       const message = "The benchmark comparison did not produce any results. See the workflow run for details.";
       core.setFailed(message);
       body += message;

@@ -6,10 +6,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: benchmark-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
   prepare:
     name: "Prepare benchmark"
@@ -49,6 +45,10 @@ jobs:
   benchmark:
     name: "Benchmark"
     needs: prepare
+    # Only authorized requests should compete for this PR's benchmark slot.
+    concurrency:
+      group: benchmark-${{ github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: oracle-vm-4cpu-16gb-x86-64
     timeout-minutes: 60
     permissions:

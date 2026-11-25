@@ -139,6 +139,26 @@ test("surfaces artifact download failures in the request comment and job", async
   assert.match(f.calls.updated[0].body, /could not be downloaded/);
 });
 
+test("updates the request comment when a downloaded report cannot be read", async (t) => {
+  const directory = temporaryDirectory(t);
+  for (const [reason, reportPath, expectedError] of [
+    ["missing file", path.join(directory, "benchstat.txt"), /ENOENT/],
+    ["directory instead of a file", directory, /EISDIR/],
+  ]) {
+    await t.test(reason, async () => {
+      const f = fixture();
+      await report({...f, reportPath});
+      assert.equal(f.failures.length, 1);
+      assert.match(f.failures[0], expectedError);
+      assert.equal(f.calls.updated.length, 1);
+      const [comment] = f.calls.updated;
+      assert.equal(comment.comment_id, 123);
+      assert.match(comment.body, /could not be read/);
+      assert.match(comment.body, /https:\/\/github\.com\/open-policy-agent\/gatekeeper\/actions\/runs\/99/);
+    });
+  }
+});
+
 test("does not report an empty comparison as successful", async (t) => {
   const directory = temporaryDirectory(t);
   const reportPath = path.join(directory, "benchstat.txt");
