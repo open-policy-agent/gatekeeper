@@ -32,7 +32,7 @@ spec:
       imagePullSecrets:
       {{- .Values.postInstall.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
-      serviceAccount: {{ .Values.postInstall.labelNamespace.serviceAccount.name }}
+      serviceAccountName: {{ .Values.postInstall.labelNamespace.serviceAccount.name }}
       {{- if .Values.postInstall.probeWebhook.enabled }}
       volumes:
       {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}

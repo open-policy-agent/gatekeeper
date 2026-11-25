@@ -27,7 +27,7 @@ spec:
       imagePullSecrets:
       {{- .Values.postUpgrade.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
-      serviceAccount: {{ .Values.postUpgrade.labelNamespace.serviceAccount.name }}
+      serviceAccountName: {{ .Values.postUpgrade.labelNamespace.serviceAccount.name }}
       {{- if .Values.postUpgrade.labelNamespace.priorityClassName }}
       priorityClassName: {{ .Values.postUpgrade.labelNamespace.priorityClassName }}
       {{- end }}

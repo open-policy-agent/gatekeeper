@@ -26,7 +26,7 @@ spec:
       imagePullSecrets:
       {{- .Values.preUninstall.deleteWebhookConfigurations.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
-      serviceAccount: {{ .Values.preUninstall.deleteWebhookConfigurations.serviceAccount.name }}
+      serviceAccountName: {{ .Values.preUninstall.deleteWebhookConfigurations.serviceAccount.name }}
       {{- if .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
       priorityClassName: {{ .Values.preUninstall.deleteWebhookConfigurations.priorityClassName }}
       {{- end }}
